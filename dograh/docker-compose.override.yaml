@@ -1,0 +1,14 @@
+# Local port remap so Dograh can coexist with the Vaani dev infra
+# (vaani-db:5432, vaani-redis:6379, vaani-minio:9000/9001).
+# Does NOT modify Dograh source; only host port publishing changes.
+services:
+  postgres:
+    ports: !override
+      - "5433:5432"
+  redis:
+    ports: !override
+      - "6380:6379"
+  minio:
+    ports: !override
+      - "127.0.0.1:9100:9000"
+      - "127.0.0.1:9101:9001"

@@ -1,0 +1,131 @@
+# Dograh AI
+
+## Docs
+
+- [Overview](https://docs.dograh.com/api-reference/agents.md): Create and manage voice agents (workflows) via the API
+- [Archive Agent](https://docs.dograh.com/api-reference/agents/archive.md): Archive or restore a voice agent
+- [Get Agent Count](https://docs.dograh.com/api-reference/agents/count.md): Get the total number of agents broken down by status
+- [Create from Definition](https://docs.dograh.com/api-reference/agents/create-from-definition.md): Create a voice agent from an explicit workflow definition
+- [Create from Template](https://docs.dograh.com/api-reference/agents/create-from-template.md): Generate a voice agent from a natural language description
+- [Get Agent](https://docs.dograh.com/api-reference/agents/get.md): Retrieve a single agent by ID, including its full workflow definition
+- [List Agents](https://docs.dograh.com/api-reference/agents/list.md): Retrieve all agents in your organization
+- [Create Test Run](https://docs.dograh.com/api-reference/agents/runs/create.md): Execute a workflow without placing a real phone call
+- [Get Run](https://docs.dograh.com/api-reference/agents/runs/get.md): Retrieve a single workflow run by ID
+- [List Runs](https://docs.dograh.com/api-reference/agents/runs/list.md): Retrieve all runs for a workflow
+- [Update Agent](https://docs.dograh.com/api-reference/agents/update.md): Update an agent's name, workflow definition, or configuration
+- [Validate Workflow](https://docs.dograh.com/api-reference/agents/validate.md): Validate a workflow definition without executing it
+- [Overview](https://docs.dograh.com/api-reference/api-keys.md): Create and manage API keys for programmatic access
+- [Archive API Key](https://docs.dograh.com/api-reference/api-keys/archive.md): Deactivate an API key by ID
+- [Create API Key](https://docs.dograh.com/api-reference/api-keys/create.md): Create a new API key for programmatic access
+- [List API Keys](https://docs.dograh.com/api-reference/api-keys/list.md): Retrieve all API keys for your organization
+- [Reactivate API Key](https://docs.dograh.com/api-reference/api-keys/reactivate.md): Reactivate a previously archived API key
+- [Authentication](https://docs.dograh.com/api-reference/authentication.md): How to authenticate requests to the Dograh API
+- [Overview](https://docs.dograh.com/api-reference/campaigns.md): Create and manage outbound calling campaigns
+- [Create Campaign](https://docs.dograh.com/api-reference/campaigns/create.md): Create a new outbound calling campaign
+- [Get Campaign](https://docs.dograh.com/api-reference/campaigns/get.md): Retrieve a single campaign by ID
+- [List Campaigns](https://docs.dograh.com/api-reference/campaigns/list.md): Retrieve all campaigns for your organization
+- [Pause Campaign](https://docs.dograh.com/api-reference/campaigns/pause.md): Temporarily stop a running campaign
+- [Get Campaign Progress](https://docs.dograh.com/api-reference/campaigns/progress.md): Get the current progress of a campaign
+- [Resume Campaign](https://docs.dograh.com/api-reference/campaigns/resume.md): Resume a paused campaign
+- [Get Campaign Runs](https://docs.dograh.com/api-reference/campaigns/runs.md): Retrieve individual run records for each contact in a campaign
+- [Start Campaign](https://docs.dograh.com/api-reference/campaigns/start.md): Start dialing contacts in a campaign
+- [Update Campaign](https://docs.dograh.com/api-reference/campaigns/update.md): Update campaign settings
+- [Upload Contacts CSV](https://docs.dograh.com/api-reference/campaigns/upload-contacts.md): Get a presigned S3 URL to upload a contacts CSV for a campaign
+- [Errors](https://docs.dograh.com/api-reference/errors.md): HTTP status codes and error formats returned by the Dograh API
+- [Overview](https://docs.dograh.com/api-reference/overview.md): Interact with Dograh programmatically via the REST API
+- [Overview](https://docs.dograh.com/api-reference/runs.md): Create and inspect agent runs via the API
+- [Download Recordings and Transcripts](https://docs.dograh.com/api-reference/runs/download.md): Download a recording or transcript using a time-limited public URL
+- [Retrieve Agent Run Details](https://docs.dograh.com/api-reference/runs/get-run.md): Get the details, transcript, and recording for an agent run
+- [Inbound Run Webhook](https://docs.dograh.com/api-reference/runs/inbound.md): Webhook endpoint that starts agent runs from inbound calls
+- [List Runs with Usage](https://docs.dograh.com/api-reference/runs/list-runs.md): Paginated list of workflow runs across the organization with usage and cost
+- [Trigger an Outbound Agent Run by API Trigger Node](https://docs.dograh.com/api-reference/runs/trigger.md): Start an outbound agent run using an API Trigger node UUID
+- [Trigger an Outbound Agent Run by Agent UUID](https://docs.dograh.com/api-reference/runs/trigger-workflow.md): Start an outbound agent run using a workflow's stable Agent UUID
+- [Overview](https://docs.dograh.com/api-reference/telephony-configs.md): Configure telephony providers and manage phone numbers
+- [Create Configuration](https://docs.dograh.com/api-reference/telephony-configs/create.md): Create a new telephony configuration
+- [Delete Configuration](https://docs.dograh.com/api-reference/telephony-configs/delete.md): Delete a telephony configuration
+- [Get Configuration](https://docs.dograh.com/api-reference/telephony-configs/get.md): Retrieve a telephony configuration by id
+- [List Configurations](https://docs.dograh.com/api-reference/telephony-configs/list.md): List all telephony configurations in your organization
+- [Add Phone Number](https://docs.dograh.com/api-reference/telephony-configs/phone-numbers/create.md): Attach a new phone number to a telephony configuration
+- [Delete Phone Number](https://docs.dograh.com/api-reference/telephony-configs/phone-numbers/delete.md): Remove a phone number from a telephony configuration
+- [Get Phone Number](https://docs.dograh.com/api-reference/telephony-configs/phone-numbers/get.md): Retrieve a phone number by id
+- [List Phone Numbers](https://docs.dograh.com/api-reference/telephony-configs/phone-numbers/list.md): List phone numbers attached to a telephony configuration
+- [Set Default Caller](https://docs.dograh.com/api-reference/telephony-configs/phone-numbers/set-default-caller.md): Designate a phone number as the configuration's default outbound caller id
+- [Update Phone Number](https://docs.dograh.com/api-reference/telephony-configs/phone-numbers/update.md): Update label, inbound binding, or activation state of a phone number
+- [List Supported Providers](https://docs.dograh.com/api-reference/telephony-configs/providers.md): Discover available telephony providers and the credential fields each one requires
+- [Set Default Outbound](https://docs.dograh.com/api-reference/telephony-configs/set-default-outbound.md): Designate this configuration as the org-wide default for outbound calls
+- [Update Configuration](https://docs.dograh.com/api-reference/telephony-configs/update.md): Rename a configuration or rotate its credentials
+- [Agent UUID](https://docs.dograh.com/configurations/agent-uuid.md): Find and use your workflow's stable Agent UUID
+- [API Keys and Service Keys](https://docs.dograh.com/configurations/api-keys.md): You can create API Keys to trigger Dograh Voice Agents and Service Keys to use with Inference Providers
+- [Model Configurations](https://docs.dograh.com/configurations/inference-providers.md): Configure the speech-to-speech, Dograh-managed, or bring-your-own-key models your Dograh agents use.
+- [Interruption Handling](https://docs.dograh.com/configurations/interruption.md): Control whether users can interrupt the bot while it is speaking by configuring the Allow Interruption toggle on each node.
+- [LLM](https://docs.dograh.com/configurations/llm.md): Voice Agents use LLM (Large Language Models), which are trained to understand the conversational context, and respond to users.
+- [Tracing](https://docs.dograh.com/configurations/tracing.md): Trace your agent runs to debug issues, understand LLM behavior, and refine your prompts.
+- [Transcriber](https://docs.dograh.com/configurations/transcriber.md): Voice Agents use STT (Speech to Text), to transcribe what the user speaks. This transcribed speech as text goes into an LLM to generate the response that gets played out to the user.
+- [Voice](https://docs.dograh.com/configurations/voice.md): Voice Agents use TTS (Text to Speech), which generates audio that LLMs generate during the course of a conversation. This is the audio that the end user having the conversation listens to.
+- [Setup Reference](https://docs.dograh.com/contribution/reference.md): Host-managed setup, devcontainer internals, the Dev Container CLI, and fork maintenance.
+- [Setup](https://docs.dograh.com/contribution/setup.md): Get a Dograh dev environment running and learn the daily commands.
+- [Calls & Runs](https://docs.dograh.com/core-concepts/calls-and-runs.md): The lifecycle of a call and how runs capture its results
+- [Campaigns](https://docs.dograh.com/core-concepts/campaigns.md): Running a voice agent against a list of contacts at scale
+- [Context & Variables](https://docs.dograh.com/core-concepts/context-and-variables.md): How data flows into, through, and out of a conversation
+- [How Dograh Works](https://docs.dograh.com/core-concepts/how-dograh-works.md): The big picture — from API call to phone conversation to transcript
+- [Workflows & Agents](https://docs.dograh.com/core-concepts/workflows-and-agents.md): How conversation flows are defined in Dograh
+- [Authentication](https://docs.dograh.com/deployment/authentication.md): Configure how self-hosted Dograh authenticates users — the default local provider, or Stack Auth for social login
+- [Custom Domain](https://docs.dograh.com/deployment/custom-domain.md): Deploy Dograh AI with custom domain names and SSL certificates
+- [Docker](https://docs.dograh.com/deployment/docker.md): Deploy Dograh AI using Docker for local development and remote server environments
+- [Heroku (Coming Soon)](https://docs.dograh.com/deployment/heroku.md): One-click deployment of Dograh AI to Heroku cloud platform
+- [Deployments](https://docs.dograh.com/deployment/introduction.md): Options for self-hosting Dograh — from a local Docker install to a production remote server with a custom domain.
+- [Scaling](https://docs.dograh.com/deployment/scaling.md): Run multiple FastAPI worker processes behind nginx for higher throughput
+- [Update](https://docs.dograh.com/deployment/update.md): Update your self-hosted Dograh stack to a newer image version
+- [Environment Variables](https://docs.dograh.com/developer/environment-variables.md): Complete reference for all environment variables used by the Dograh backend
+- [Webhook Payloads](https://docs.dograh.com/developer/webhooks.md): Context variables available in webhook nodes and the data Dograh sends after a call
+- [Workflow Definition Schema](https://docs.dograh.com/developer/workflow-schema.md): Schema reference for the workflow_definition object used in the Agents API
+- [Use External Tools, Knowledge](https://docs.dograh.com/getting-started/add-tools-and-knowledge-base.md): Make your agent do something during the call, not just talk. Connect it to live data and your company documents.
+- [Connect with Telephony](https://docs.dograh.com/getting-started/connect-telephony.md): Hook up Twilio so Dograh can make and receive real calls, not just browser test calls.
+- [Your First Agent in 5 Minutes](https://docs.dograh.com/getting-started/first-agent.md): Build and talk to a working voice agent in five minutes using Web Calls — no telephony setup required.
+- [Introduction](https://docs.dograh.com/getting-started/index.md)
+- [Prerequisites](https://docs.dograh.com/getting-started/prerequisites.md): System requirements and setup needed to run Dograh AI locally
+- [Sync Data using Webhook](https://docs.dograh.com/getting-started/send-call-data-with-webhooks.md): Get everything Dograh learned during the call back into your system the moment it ends.
+- [Trigger Calls using API](https://docs.dograh.com/getting-started/trigger-calls-from-your-backend.md): Kick off a call the moment a lead lands in your CRM or spreadsheet, no manual dialing.
+- [Troubleshooting](https://docs.dograh.com/getting-started/troubleshooting.md): Common issues and solutions for running Dograh AI
+- [MCP Server](https://docs.dograh.com/integrations/mcp.md): Connect Codex, Claude, and other AI assistants to your Dograh workspace via the Model Context Protocol
+- [Paygent Integration](https://docs.dograh.com/integrations/paygent.md): Connect Dograh to Paygent — real-time cost tracking, multimodal usage monitoring, and billing for voice agents
+- [Agent Stream](https://docs.dograh.com/integrations/telephony/agent-stream.md): Stream audio to a Dograh agent over a WebSocket
+- [Asterisk ARI Integration](https://docs.dograh.com/integrations/telephony/asterisk-ari.md): Connect Dograh AI to your Asterisk PBX using the Asterisk REST Interface (ARI)
+- [Cloudonix Integration](https://docs.dograh.com/integrations/telephony/cloudonix.md): Configure Cloudonix for voice communication in Dograh AI
+- [Custom Telephony Provider](https://docs.dograh.com/integrations/telephony/custom.md): Build your own telephony provider integration for Dograh AI
+- [Inbound Calling](https://docs.dograh.com/integrations/telephony/inbound.md): Configure inbound calling for Twilio, Vonage, Plivo, Telnyx, Cloudonix, Vobiz, and Asterisk ARI providers in Dograh AI
+- [Telephony Integration](https://docs.dograh.com/integrations/telephony/overview.md): Connect voice agents with telephony providers for inbound and outbound calls
+- [Plivo Integration](https://docs.dograh.com/integrations/telephony/plivo.md): Configure Plivo for voice communication in Dograh AI
+- [Telnyx Integration](https://docs.dograh.com/integrations/telephony/telnyx.md): Configure Telnyx for voice communication in Dograh AI
+- [Twilio Integration](https://docs.dograh.com/integrations/telephony/twilio.md): Configure Twilio for voice communication in Dograh AI
+- [VICIdial Integration](https://docs.dograh.com/integrations/telephony/vicidial.md): Connect Dograh to VICIdial through Asterisk ARI for call control, in-group transfers, and lead updates
+- [Vobiz Integration](https://docs.dograh.com/integrations/telephony/vobiz.md): Configure Vobiz for voice communication in Dograh AI
+- [Vonage Integration](https://docs.dograh.com/integrations/telephony/vonage.md): Configure Vonage (Nexmo) for voice communication in Dograh AI
+- [Webhooks and Callbacks](https://docs.dograh.com/integrations/telephony/webhooks.md): How Dograh AI handles telephony webhooks and audio streaming
+- [Tuner Integration](https://docs.dograh.com/integrations/tuner.md): Connect Dograh to Tuner — the observability, simulation, and testing layer for voice
+- [Build an agent](https://docs.dograh.com/sdks/build-an-agent.md): Assemble a Dograh voice agent programmatically with the SDK and save it as a draft
+- [Introduction](https://docs.dograh.com/sdks/introduction.md): Build and operate Dograh voice AI agents programmatically from Python or TypeScript
+- [Place an outbound call](https://docs.dograh.com/sdks/outbound-calls.md): Trigger a Dograh voice agent to call a phone number from the SDK
+- [Add to Website](https://docs.dograh.com/voice-agent/add-to-website.md): Add your Dograh voice agent to any website so visitors can talk to it.
+- [Agent Node](https://docs.dograh.com/voice-agent/agent.md): Agent node contains the prompts that drives the conversation with the Voice Agent
+- [API Trigger](https://docs.dograh.com/voice-agent/api-trigger.md): Trigger outbound calls from external systems like n8n, Zapier, or your own backend
+- [Editing a Workflow](https://docs.dograh.com/voice-agent/editing-a-workflow.md): Learn the fundamentals of building workflows with nodes, pathways, and conversation flow in the voice agent builder.
+- [End Call](https://docs.dograh.com/voice-agent/end-call.md): You can use End Call node to configure how the Agent says its final message right before the call is terminated
+- [Global Node](https://docs.dograh.com/voice-agent/global.md): Global Node contains the common prompt that is prepended to the prompt of every node, in which `Add Global Prompt` is turned on.
+- [Voice Agent Builder](https://docs.dograh.com/voice-agent/introduction.md): Dograh's voice agent builder lets you design a conversation as a graph of nodes and pathways. Learn the graph model, the available node types, and where to start.
+- [Knowledge Base](https://docs.dograh.com/voice-agent/knowledge-base.md): Upload documents that your voice agent can reference during live conversations to provide accurate, context-aware responses.
+- [Pre-Call Data Fetch](https://docs.dograh.com/voice-agent/pre-call-data-fetch.md): Fetch customer data from your CRM or ERP before the call starts, so your voice agent can greet callers by name and reference their account details.
+- [Pre-recorded Audio](https://docs.dograh.com/voice-agent/pre-recorded-audio.md): Build hybrid voice agents that combine pre-recorded audio with dynamic text generation for lower latency, reduced TTS costs, and natural-sounding conversations.
+- [QA](https://docs.dograh.com/voice-agent/qa.md): QA node allows you to run post-call quality analysis on your Voice Agent runs
+- [Start Call](https://docs.dograh.com/voice-agent/start-call.md): You can use Start Call node to Start the call and configure how Agent greets the user when the conversation starts.
+- [Template Variables](https://docs.dograh.com/voice-agent/template-variables.md): You can use Template Variables in your prompts for your Agent nodes, or when constructing the payload for the Webhook Node
+- [Call Transfer](https://docs.dograh.com/voice-agent/tools/call-transfer.md): Transfer live telephony calls to static destinations or resolve the destination dynamically during the call.
+- [End Call](https://docs.dograh.com/voice-agent/tools/end-call.md): Allow your AI agent to terminate calls when conversations reach a natural conclusion or specific conditions are met.
+- [HTTP API](https://docs.dograh.com/voice-agent/tools/http-api.md): Create REST API tools that your AI agent can invoke during conversations to integrate with external systems.
+- [Tools](https://docs.dograh.com/voice-agent/tools/introduction.md): Extend your voice agent's capabilities by giving it tools to perform actions during live conversations.
+- [MCP Tool](https://docs.dograh.com/voice-agent/tools/mcp-tool.md): Connect an external MCP server to your voice agent so the LLM can call remote tools during a live conversation.
+- [Webhook](https://docs.dograh.com/voice-agent/webhook.md): Webhook node allow you to sync the result of Voice Agent runs to your external systems, like CRM or to other workflow orchestrator like Zapier or n8n.
+
+## OpenAPI Specs
+
+- [openapi](https://docs.dograh.com/api-reference/openapi.json)

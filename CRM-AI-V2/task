@@ -1,0 +1,6 @@
+refer to @AI_Voice_Agent_SaaS_Feature_Specification.md 
+i will be using hermes agent with cheapest model hooked to it.
+as you know these cheap models are not capable for high or complex tasks.
+i want you to write a detailed step by step instructions to this cheapest model so that it will act as cheap agent.
+planning done by kimik3 or you and execution like wrieting codes , debig etc done by cheapest model so that i can save tokens. include complete tasks right from starting to testing and deploying production ready application.
+make sure everything is implemented, impressive ui and robust architecture, write in sapearte .md files, also include prompts to test and exected output. everything a beginner need to develop this application. i will be using hermes agent on vps . use your creativity and make plan it to make it a million dollar application.

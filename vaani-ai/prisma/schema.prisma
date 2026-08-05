@@ -1,0 +1,1263 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Tenancy & Auth ----------
+
+enum Role {
+  OWNER
+  ADMIN
+  MANAGER
+  AGENT
+  VIEWER
+}
+
+enum TotpStatus {
+  PENDING
+  ENABLED
+  DISABLED
+}
+
+enum SsoProvider {
+  GOOGLE
+  SAML
+  OIDC
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  industry  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // White-label (spec 3.1)
+  logoUrl                String?
+  primaryColor           String? // hex, e.g. "#7c3aed"
+  customDomain           String?   @unique
+  customDomainVerifiedAt DateTime?
+  whiteLabelEnabled      Boolean   @default(false)
+
+  // Recording disclosure default for the whole workspace (spec 11)
+  recordingDisclosureText String?
+
+  // Reseller: this workspace may be a child of a ResellerAccount
+  resellerId String?
+  reseller   ResellerAccount? @relation("ResellerChildren", fields: [resellerId], references: [id], onDelete: SetNull)
+
+  memberships          Membership[]
+  agents               Agent[]
+  agentVersions        AgentVersion[]
+  knowledgeDocuments   KnowledgeDocument[]
+  marketplaceTemplates MarketplaceTemplate[] // templates authored BY this workspace
+  phoneNumbers         PhoneNumber[]
+  numberPools          NumberPool[]
+  contactLists         ContactList[]
+  contacts             Contact[]
+  dncEntries           DncEntry[]
+  campaigns            Campaign[]
+  calls                Call[]
+  liveCallStates       LiveCallState[]
+  transferRequests     TransferRequest[]
+  voicemailMessages    VoicemailMessage[]
+  callbackTasks        CallbackTask[]
+  whatsAppTemplates    WhatsAppTemplate[]
+  whatsAppCampaigns    WhatsAppCampaign[]
+  calendarConnections  CalendarConnection[]
+  crmConnections       CrmConnection[]
+  webhookSubscriptions WebhookSubscription[]
+  qaScores             QaScore[]
+  savedReports         SavedReport[]
+  scheduledDigests     ScheduledDigest[]
+  wallet               Wallet?
+  subscription         Subscription?
+  invoices             Invoice[]
+  paymentOrders        PaymentOrder[]
+  autoTopUp            AutoTopUp?
+  numberRentals        NumberRental[]
+  trialState           TrialState?
+  resellerAccount      ResellerAccount?      @relation("ResellerParent") // set if this workspace IS a reseller parent
+  retentionPolicy      RetentionPolicy?
+  gdprRequests         GdprRequest[]
+  onboardingState      OnboardingState?
+  kycRecords           KycRecord[]
+  auditLogs            AuditLog[]
+  apiKeys              ApiKey[]
+  invites              WorkspaceInvite[]
+  ssoIdentities        SsoIdentity[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships           Membership[]
+  sessions              Session[]
+  totpSecret            TotpSecret?
+  ssoIdentities         SsoIdentity[]
+  backupCodes           BackupCode[]
+  apiKeysCreated        ApiKey[]
+  invitesSent           WorkspaceInvite[]
+  transfersAccepted     TransferRequest[]
+  callbackTasksAssigned CallbackTask[]
+}
+
+model Membership {
+  id                 String   @id @default(cuid())
+  userId             String
+  workspaceId        String
+  role               Role     @default(VIEWER)
+  // Granular feature-level permission overrides on top of the role (spec 3.2).
+  // Permission keys are strings like "agents:write", "billing:read".
+  grantedPermissions String[] @default([])
+  revokedPermissions String[] @default([])
+  createdAt          DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
+}
+
+model Session {
+  id                String    @id @default(cuid())
+  token             String    @unique
+  userId            String
+  activeWorkspaceId String?
+  deviceName        String?
+  ipAddress         String?
+  userAgent         String?
+  lastSeenAt        DateTime  @default(now())
+  revokedAt         DateTime? // set by forced logout (spec 3.3)
+  expiresAt         DateTime
+  createdAt         DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String?
+  action      String
+  entity      String
+  entityId    String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+}
+
+model ApiKey {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  name            String
+  keyPrefix       String // first 8 chars, shown in UI, e.g. "vaani_k1"
+  keyHash         String    @unique // sha256 hex of the full key; the key itself is never stored
+  scopes          String[]  @default([]) // e.g. ["calls:read","campaigns:write"]
+  ipAllowlist     String[]  @default([]) // CIDR strings; empty = any IP allowed
+  lastUsedAt      DateTime?
+  expiresAt       DateTime?
+  revokedAt       DateTime?
+  createdByUserId String?
+  createdAt       DateTime  @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+}
+
+model WorkspaceInvite {
+  id              String       @id @default(cuid())
+  workspaceId     String
+  email           String
+  role            Role         @default(VIEWER)
+  token           String       @unique
+  status          InviteStatus @default(PENDING)
+  invitedByUserId String?
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  createdAt       DateTime     @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy User?     @relation(fields: [invitedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+}
+
+model TotpSecret {
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  secret    String // base32 TOTP secret
+  status    TotpStatus @default(PENDING) // PENDING until first successful verify
+  enabledAt DateTime?
+  createdAt DateTime   @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SsoIdentity {
+  id                String      @id @default(cuid())
+  userId            String
+  workspaceId       String? // set when an enterprise SAML/OIDC IdP is tied to one workspace
+  provider          SsoProvider
+  externalSubjectId String // the IdP "sub" claim
+  email             String?
+  createdAt         DateTime    @default(now())
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, externalSubjectId])
+  @@index([userId])
+  @@index([workspaceId])
+}
+
+// ---------- Voice Agents, Knowledge & Telephony ----------
+
+enum AgentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum VersionStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum KnowledgeDocType {
+  PDF
+  DOCX
+  URL
+  FAQ
+}
+
+enum KnowledgeIndexStatus {
+  PENDING
+  INDEXING
+  INDEXED
+  FAILED
+}
+
+enum AgentToolType {
+  CALENDAR_BOOKING
+  HUMAN_TRANSFER
+  SMS
+  WHATSAPP
+  CRM_WRITE
+  PAYMENT_LINK
+  CUSTOM_WEBHOOK
+  VOICEMAIL
+}
+
+enum NumberType {
+  LOCAL
+  TOLLFREE
+  MOBILE
+  SERIES_140 // TRAI promotional series
+  SERIES_1600 // TRAI service/transactional series
+}
+
+model Agent {
+  id                      String      @id @default(cuid())
+  workspaceId             String
+  name                    String
+  template                String? // e.g. "clinic-receptionist"
+  systemPrompt            String
+  greeting                String
+  languageMode            String      @default("auto") // auto | fixed | caller-select
+  fixedLanguage           String? // e.g. "hi", "en-IN"
+  voiceId                 String      @default("anushka") // Sarvam Bulbul speaker
+  llmModel                String      @default("meta-llama/llama-3.1-70b-instruct")
+  maxCallSeconds          Int         @default(600)
+  conversationConfig Json? // {allowBargeIn, vadSensitivity, silenceTimeoutSec, fillerPhrases[], speakingPace, voiceMap{lang:voiceId}}
+  recordingDisclosureText String? // overrides Workspace.recordingDisclosureText
+  dograhWorkflowId        String? // set after publishing to Dograh (mirrors latest published AgentVersion)
+  dograhWorkflowUuid String?   // Dograh workflow_uuid — used by the public call-trigger endpoint
+  status                  AgentStatus @default(DRAFT)
+  version                 Int         @default(1) // mirrors latest AgentVersion.version
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+
+  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  versions           AgentVersion[]
+  knowledgeDocuments KnowledgeDocument[]
+  toolConfigs        AgentToolConfig[]
+  phoneNumbers       PhoneNumber[]
+  campaigns          Campaign[]
+  calls              Call[]
+
+  @@index([workspaceId])
+}
+
+model AgentVersion {
+  id               String        @id @default(cuid())
+  agentId          String
+  workspaceId      String
+  version          Int
+  status           VersionStatus @default(DRAFT)
+  label            String? // e.g. "v3 — shorter greeting"
+  systemPrompt     String
+  greeting         String
+  config           Json? // snapshot: voiceId, llmModel, languageMode, tools
+  dograhWorkflowId String? // Dograh workflow created for THIS version
+  dograhWorkflowUuid String? // Dograh workflow_uuid for THIS version (public call-trigger path)
+  isAbVariant      Boolean       @default(false)
+  abTrafficPercent Int? // 0-100; set only on A/B variants, variants of one agent sum to 100
+  publishedAt      DateTime?
+  createdByUserId  String?
+  createdAt        DateTime      @default(now())
+
+  agent     Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, version])
+  @@index([workspaceId])
+}
+
+model KnowledgeDocument {
+  id                   String               @id @default(cuid())
+  workspaceId          String
+  agentId              String? // null = shared knowledge for all agents in the workspace
+  type                 KnowledgeDocType
+  title                String
+  sourceUrl            String? // for type URL
+  storageKey           String? // MinIO key for uploaded PDF/DOCX
+  contentText          String? // extracted plain text (also used for FAQ entries)
+  status               KnowledgeIndexStatus @default(PENDING)
+  error                String?
+  reindexIntervalHours Int? // null = no scheduled re-index
+  lastIndexedAt        DateTime?
+  nextReindexAt        DateTime?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent     Agent?    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([agentId])
+}
+
+model AgentToolConfig {
+  id        String        @id @default(cuid())
+  agentId   String
+  tool      AgentToolType
+  enabled   Boolean       @default(true)
+  config    Json? // per-tool settings: calendarId, webhook url+headers, message template, queue/skill...
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, tool])
+}
+
+model MarketplaceTemplate {
+  id                String   @id @default(cuid())
+  authorWorkspaceId String // workspace that published it; the seed workspace authors the starter templates
+  name              String
+  industry          String
+  description       String
+  systemPrompt      String
+  greeting          String
+  config            Json? // suggested voice/llm/tools
+  installs          Int      @default(0)
+  published         Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  authorWorkspace Workspace @relation(fields: [authorWorkspaceId], references: [id], onDelete: Cascade)
+
+  @@index([authorWorkspaceId])
+  @@index([industry, published])
+}
+
+model PhoneNumber {
+  id                String     @id @default(cuid())
+  workspaceId       String
+  number            String // E.164, e.g. "+9180XXXXXX01"
+  label             String?
+  provider          String     @default("vobiz")
+  vobizNumberId     String?
+  numberType        NumberType @default(LOCAL)
+  agentId           String?
+  poolId            String? // NumberPool this DID rotates in (outbound)
+  monthlyRentPaise  Int        @default(0) // what we charge the tenant (wholesale + margin)
+  dailyCallCap      Int? // spam-flag protection (spec 6.1)
+  lifetimeCallCap   Int?
+  dailyCallsUsed    Int        @default(0) // reset by the nightly worker
+  lifetimeCallsUsed Int        @default(0)
+  createdAt         DateTime   @default(now())
+
+  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent             Agent?             @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  pool              NumberPool?        @relation(fields: [poolId], references: [id], onDelete: SetNull)
+  rentals           NumberRental[]
+  voicemailMessages VoicemailMessage[]
+
+  @@unique([workspaceId, number])
+  @@index([workspaceId])
+}
+
+model NumberPool {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  createdAt   DateTime @default(now())
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  numbers   PhoneNumber[]
+  campaigns Campaign[]
+
+  @@index([workspaceId])
+}
+
+// ---------- Contacts & Campaigns ----------
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  RUNNING
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum CampaignType {
+  LEAD_QUALIFICATION
+  APPOINTMENT_REMINDER
+  PAYMENT_REMINDER
+  FEEDBACK_SURVEY
+  ORDER_CONFIRMATION
+  REACTIVATION
+  EVENT_INVITE
+  POLITICAL_SURVEY
+}
+
+enum AmdPolicy {
+  HANGUP
+  LEAVE_MESSAGE
+}
+
+enum CallbackStatus {
+  PENDING
+  DONE
+  CANCELLED
+}
+
+enum WhatsAppTemplateStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum DncSource {
+  OPT_OUT // caller said "stop calling me" / opted out mid-call
+  REGISTRY // TRAI DND registry scrubbing
+  MANUAL // uploaded/added by a workspace user
+}
+
+model ContactList {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  createdAt   DateTime @default(now())
+
+  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contacts          Contact[]
+  campaigns         Campaign[]
+  whatsAppCampaigns WhatsAppCampaign[]
+
+  @@index([workspaceId])
+}
+
+model Contact {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  listId        String?
+  phone         String // E.164
+  name          String?
+  attributes    Json? // arbitrary CSV columns, e.g. {"city":"Pune","loan_id":"LN123"}
+  dnc           Boolean   @default(false) // fast flag kept in sync with DncEntry
+  timezone      String? // IANA, e.g. "Asia/Kolkata" — per-contact dialing windows
+  consentAt     DateTime? // TCPA-style consent timestamp (spec 11)
+  consentSource String? // e.g. "web-form", "csv-upload", "verbal"
+  optOutAt      DateTime? // set when the contact opts out mid-call or via SMS
+  crmExternalId String? // id of this contact in the connected CRM (two-way sync)
+  createdAt     DateTime  @default(now())
+
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  list             ContactList?      @relation(fields: [listId], references: [id], onDelete: SetNull)
+  campaignContacts CampaignContact[]
+  callbackTasks    CallbackTask[]
+
+  @@unique([workspaceId, phone])
+  @@index([workspaceId])
+}
+
+model DncEntry {
+  id          String    @id @default(cuid())
+  workspaceId String
+  phone       String // E.164
+  source      DncSource
+  reason      String?
+  createdAt   DateTime  @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, phone])
+  @@index([workspaceId])
+}
+
+model Campaign {
+  id                 String         @id @default(cuid())
+  workspaceId        String
+  name               String
+  type               CampaignType   @default(LEAD_QUALIFICATION)
+  agentId            String
+  listId             String
+  status             CampaignStatus @default(DRAFT)
+  callsPerMinute     Int            @default(10) // pacing cap
+  concurrency        Int            @default(1) // max simultaneous calls
+  maxAttempts        Int            @default(2)
+  retryDelayMin      Int            @default(60)
+  retryPolicy        Json? // per-disposition overrides, e.g. {"busy":{"attempts":3,"delayMin":30},"no-answer":{"attempts":2,"delayMin":120},"voicemail":{"attempts":1,"delayMin":1440}}
+  callingWindowStart String         @default("09:00") // HH:mm, tenant-local
+  callingWindowEnd   String         @default("19:00")
+  timezoneWindows    Json? // optional day-of-week rules, e.g. {"timezone":"Asia/Kolkata","days":[1,2,3,4,5],"windows":[["09:00","13:00"],["16:00","19:00"]]}
+  openingHook        String? // configurable first-15-seconds opener (spec 6.2)
+  objectionPlaybook  String? // LLM guidance text for objection handling
+  amdPolicy          AmdPolicy      @default(HANGUP) // voicemail/AMD behavior
+  predictiveDialing  Boolean        @default(false) // over-dial ahead of agent availability
+  poolId             String? // NumberPool for DID rotation
+  scheduledAt        DateTime?
+  startedAt          DateTime?
+  finishedAt         DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  workspace     Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent         Agent             @relation(fields: [agentId], references: [id])
+  list          ContactList       @relation(fields: [listId], references: [id])
+  pool          NumberPool?       @relation(fields: [poolId], references: [id], onDelete: SetNull)
+  contacts      CampaignContact[]
+  calls         Call[]
+  callbackTasks CallbackTask[]
+
+  @@index([workspaceId])
+}
+
+enum CampaignContactStatus {
+  PENDING
+  DIALING
+  COMPLETED
+  FAILED
+  RETRY_SCHEDULED
+  SKIPPED_DNC
+}
+
+model CampaignContact {
+  id            String                @id @default(cuid())
+  campaignId    String
+  contactId     String
+  status        CampaignContactStatus @default(PENDING)
+  attempts      Int                   @default(0)
+  lastResult    String? // last disposition: "no-answer", "busy", "completed", "voicemail"
+  lastCallId    String? // Call id of the most recent attempt
+  nextAttemptAt DateTime? // retry scheduling
+  updatedAt     DateTime              @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact  Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, contactId])
+  @@index([campaignId, status])
+}
+
+model CallbackTask {
+  id               String         @id @default(cuid())
+  workspaceId      String
+  contactId        String?
+  campaignId       String?
+  callId           String? // the call where the caller asked for the callback
+  phone            String // E.164
+  note             String? // e.g. "call me tomorrow at 5 about the EMI"
+  dueAt            DateTime
+  status           CallbackStatus @default(PENDING)
+  assignedToUserId String?
+  completedAt      DateTime?
+  createdAt        DateTime       @default(now())
+
+  workspace  Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact    Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  campaign   Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  call       Call?     @relation(fields: [callId], references: [id], onDelete: SetNull)
+  assignedTo User?     @relation(fields: [assignedToUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status, dueAt])
+}
+
+model WhatsAppTemplate {
+  id            String                 @id @default(cuid())
+  workspaceId   String
+  name          String
+  language      String                 @default("en")
+  body          String // template text with {{1}} {{2}} placeholders
+  dltTemplateId String? // DLT registration id (spec 11)
+  status        WhatsAppTemplateStatus @default(DRAFT)
+  createdAt     DateTime               @default(now())
+
+  workspace Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaigns WhatsAppCampaign[]
+
+  @@index([workspaceId])
+}
+
+model WhatsAppCampaign {
+  id          String         @id @default(cuid())
+  workspaceId String
+  name        String
+  templateId  String
+  listId      String?
+  status      CampaignStatus @default(DRAFT)
+  scheduledAt DateTime?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime       @default(now())
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  template  WhatsAppTemplate @relation(fields: [templateId], references: [id])
+  list      ContactList?     @relation(fields: [listId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+}
+
+// ---------- Calls (CDR) & Human-in-the-Loop ----------
+
+enum CallDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum CallStatus {
+  RINGING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  NO_ANSWER
+  BUSY
+  VOICEMAIL
+}
+
+enum AmdResult {
+  UNKNOWN
+  HUMAN
+  MACHINE // voicemail / answering machine detected
+}
+
+enum InterestScore {
+  HOT
+  WARM
+  COLD
+}
+
+enum LiveMode {
+  NONE
+  LISTEN
+  WHISPER
+  BARGE
+  TAKEOVER
+}
+
+enum Speaker {
+  AGENT
+  CALLER
+  SYSTEM
+}
+
+enum TransferStatus {
+  QUEUED
+  RINGING
+  ACCEPTED
+  COMPLETED
+  CANCELLED
+  NO_ANSWER
+}
+
+enum VoicemailStatus {
+  NEW
+  READ
+  ARCHIVED
+}
+
+model Call {
+  id                   String         @id @default(cuid())
+  workspaceId          String
+  dograhCallId         String?        @unique
+  direction            CallDirection
+  status               CallStatus     @default(RINGING)
+  fromNumber           String
+  toNumber             String
+  agentId              String?
+  campaignId           String?
+  startedAt            DateTime       @default(now())
+  answeredAt           DateTime?
+  endedAt              DateTime?
+  durationSec          Int            @default(0)
+  summary              String?
+  sentiment            String? // positive | neutral | negative
+  outcome              String? // e.g. "booked", "qualified", "not-interested", "message-taken"
+  extractedEntities    Json? // e.g. {"name":"Ramesh","city":"Pune","loan_id":"LN123"}
+  amdResult            AmdResult      @default(UNKNOWN)
+  interestScore        InterestScore? // HOT/WARM/COLD lead classification (spec 6.2)
+  interestReason       String? // why the classifier picked the score
+  hallucinationFlag    Boolean        @default(false)
+  hallucinationNotes   String?
+  deadAirSeconds       Int            @default(0) // total silence > 3s during the call
+  scriptAdherenceScore Int? // 0-100, set by QA scoring
+  piiRedacted          Boolean        @default(false) // transcript was PII-redacted (spec 11)
+  recordingKey         String? // MinIO object key
+  transcript           String? // full plain-text transcript (full-text-search ready)
+  costTelephonyPaise   Int            @default(0)
+  costSttPaise         Int            @default(0)
+  costLlmPaise         Int            @default(0)
+  costTtsPaise         Int            @default(0)
+  billedPaise          Int            @default(0) // what WE charge the tenant (cost + markup)
+  createdAt            DateTime       @default(now())
+
+  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent             Agent?             @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  campaign          Campaign?          @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  events            CallEvent[]
+  transcriptEntries TranscriptEntry[]
+  qaScores          QaScore[]
+  liveState         LiveCallState?
+  transferRequests  TransferRequest[]
+  voicemailMessages VoicemailMessage[]
+  callbackTasks     CallbackTask[]
+
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, campaignId])
+}
+
+model CallEvent {
+  id        String   @id @default(cuid())
+  callId    String
+  type      String // "status" | "transcript" | "tool" | "summary"
+  payload   Json
+  createdAt DateTime @default(now())
+
+  call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@index([callId, createdAt])
+}
+
+model TranscriptEntry {
+  id          String   @id @default(cuid())
+  callId      String
+  speaker     Speaker
+  text        String
+  timestampMs Int      @default(0) // ms from call start
+  createdAt   DateTime @default(now())
+
+  call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@index([callId, timestampMs])
+}
+
+model LiveCallState {
+  id               String     @id @default(cuid())
+  workspaceId      String
+  callId           String     @unique // one row per in-progress call; delete when the call ends
+  status           CallStatus @default(IN_PROGRESS)
+  mode             LiveMode   @default(NONE) // supervisor listen/whisper/barge/takeover
+  liveTranscript   String? // rolling tail of the transcript for the live dashboard
+  supervisorUserId String?
+  whisperContext   String? // coach text injected as LLM context in WHISPER mode
+  updatedAt        DateTime   @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  call      Call      @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, status])
+}
+
+model TransferRequest {
+  id               String         @id @default(cuid())
+  workspaceId      String
+  callId           String
+  queue            String? // e.g. "sales", "support"
+  skill            String? // e.g. "hindi", "loans" — skills-based routing (spec 7)
+  status           TransferStatus @default(QUEUED)
+  reason           String? // why the AI escalated (low confidence, explicit request, VIP...)
+  contextSnapshot  Json? // transcript + summary shown to the human before accepting
+  acceptedByUserId String?
+  acceptedAt       DateTime?
+  createdAt        DateTime       @default(now())
+
+  workspace  Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  call       Call      @relation(fields: [callId], references: [id], onDelete: Cascade)
+  acceptedBy User?     @relation(fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status])
+}
+
+model VoicemailMessage {
+  id            String          @id @default(cuid())
+  workspaceId   String
+  callId        String?
+  phoneNumberId String?
+  fromNumber    String
+  transcript    String? // voicemail-to-text (spec 5)
+  recordingKey  String?
+  status        VoicemailStatus @default(NEW)
+  createdAt     DateTime        @default(now())
+
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  call        Call?        @relation(fields: [callId], references: [id], onDelete: SetNull)
+  phoneNumber PhoneNumber? @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status])
+}
+
+// ---------- Integrations ----------
+
+enum CalendarProvider {
+  GOOGLE
+  MICROSOFT
+  CALENDLY
+  CALCOM
+}
+
+enum CrmProvider {
+  HUBSPOT
+  ZOHO
+  SALESFORCE
+  LEADSQUARED
+  FRESHSALES
+  PIPEDRIVE
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+model CalendarConnection {
+  id                String           @id @default(cuid())
+  workspaceId       String
+  provider          CalendarProvider
+  accountEmail      String?
+  accessToken       String
+  refreshToken      String?
+  tokenExpiresAt    DateTime?
+  primaryCalendarId String? // calendar used for availability checks + bookings
+  active            Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, provider])
+  @@index([workspaceId])
+}
+
+model CrmConnection {
+  id                String      @id @default(cuid())
+  workspaceId       String
+  provider          CrmProvider
+  instanceUrl       String? // e.g. Salesforce/Zoho instance URL
+  accessToken       String
+  refreshToken      String?
+  tokenExpiresAt    DateTime?
+  fieldMapping      Json? // {"contact.name":"firstname","contact.phone":"phone","call.outcome":"hs_lead_status"}
+  twoWaySyncEnabled Boolean     @default(false)
+  lastSyncAt        DateTime?
+  active            Boolean     @default(true)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, provider])
+  @@index([workspaceId])
+}
+
+model WebhookSubscription {
+  id          String   @id @default(cuid())
+  workspaceId String
+  url         String
+  events      String[] @default([]) // e.g. ["call.started","call.completed","lead.qualified","campaign.finished"]
+  secret      String // HMAC-SHA256 signing secret sent as X-Vaani-Signature
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  workspace  Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+
+  @@index([workspaceId])
+}
+
+model WebhookDelivery {
+  id             String                @id @default(cuid())
+  subscriptionId String
+  event          String
+  payload        Json
+  status         WebhookDeliveryStatus @default(PENDING)
+  attempts       Int                   @default(0)
+  responseCode   Int?
+  nextRetryAt    DateTime? // consumed by the webhook retry worker
+  deliveredAt    DateTime?
+  createdAt      DateTime              @default(now())
+
+  subscription WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextRetryAt])
+}
+
+// ---------- Analytics & Quality ----------
+
+enum DigestFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+model QaScore {
+  id          String   @id @default(cuid())
+  workspaceId String
+  callId      String
+  rubricName  String // e.g. "receptionist-default", "collections-compliance"
+  scores      Json // per-criterion: {"greeting":9,"compliance_lines":10,"closing":8}
+  totalScore  Int
+  maxScore    Int
+  scorerModel String // LLM that scored, e.g. "meta-llama/llama-3.1-70b-instruct"
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  call      Call      @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@index([callId])
+}
+
+model SavedReport {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  reportType  String // "calls" | "campaign" | "cost" | "agent-performance"
+  config      Json? // filters, date range, grouping, columns
+  createdAt   DateTime @default(now())
+
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  digests   ScheduledDigest[]
+
+  @@index([workspaceId])
+}
+
+model ScheduledDigest {
+  id          String          @id @default(cuid())
+  workspaceId String
+  reportId    String? // optional: digest of a specific SavedReport
+  frequency   DigestFrequency
+  recipients  String[] // email addresses
+  active      Boolean         @default(true)
+  lastSentAt  DateTime?
+  createdAt   DateTime        @default(now())
+
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  report    SavedReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+}
+
+// ---------- Billing ----------
+
+enum PaymentProvider {
+  RAZORPAY
+  STRIPE
+}
+
+enum RentalStatus {
+  ACTIVE
+  ENDED
+}
+
+model Plan {
+  id                String  @id @default(cuid())
+  code              String  @unique // "starter" | "growth" | "enterprise"
+  name              String
+  monthlyPricePaise Int
+  includedMinutes   Int
+  maxAgents         Int
+  maxSeats          Int
+  concurrentLines   Int     @default(1)
+  whiteLabel        Boolean @default(false)
+  premiumVoices     Boolean @default(false)
+  dedicatedInfra    Boolean @default(false)
+  featureGates      Json? // any extra gates, e.g. {"qa_scoring":true,"api_access":false}
+  markupPercent     Int     @default(40) // our margin over wholesale cost
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id               String   @id @default(cuid())
+  workspaceId      String   @unique
+  planId           String
+  status           String   @default("active") // active | past_due | cancelled
+  currentPeriodEnd DateTime
+  createdAt        DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  plan      Plan      @relation(fields: [planId], references: [id])
+}
+
+model Wallet {
+  id                   String   @id @default(cuid())
+  workspaceId          String   @unique
+  balancePaise         Int      @default(0)
+  lowBalanceAlertPaise Int      @default(50000) // ₹500
+  updatedAt            DateTime @updatedAt
+
+  workspace    Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+}
+
+enum TxnType {
+  TOPUP
+  CALL_DEBIT
+  NUMBER_RENT
+  REFUND
+  TRIAL_CREDIT
+}
+
+model WalletTransaction {
+  id                String   @id @default(cuid())
+  walletId          String
+  type              TxnType
+  amountPaise       Int // positive = credit, negative = debit
+  balanceAfterPaise Int
+  reference         String? // call id / payment order id
+  note              String?
+  createdAt         DateTime @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId, createdAt])
+}
+
+model Invoice {
+  id                String   @id @default(cuid())
+  workspaceId       String
+  razorpayPaymentId String?  @unique
+  razorpayOrderId   String?
+  amountPaise       Int // taxable base (before GST)
+  gstPaise          Int      @default(0) // total GST = cgst+sgst or igst (kept for quick display)
+  gstin             String? // customer GSTIN (B2B invoices)
+  placeOfSupply     String? // e.g. "Karnataka (29)"
+  hsnSac            String? // e.g. "998314"
+  cgstPaise         Int      @default(0)
+  sgstPaise         Int      @default(0)
+  igstPaise         Int      @default(0)
+  pdfKey            String? // MinIO key of the generated GST invoice PDF
+  status            String   @default("pending") // pending | paid | failed
+  createdAt         DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+}
+
+model PaymentOrder {
+  id                String          @id @default(cuid())
+  workspaceId       String
+  provider          PaymentProvider
+  providerOrderId   String?         @unique // razorpay order id / stripe payment intent id
+  providerSessionId String? // stripe checkout session id
+  amountPaise       Int
+  currency          String          @default("INR")
+  status            String          @default("created") // created | paid | failed | expired
+  createdAt         DateTime        @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+}
+
+model AutoTopUp {
+  id               String   @id @default(cuid())
+  workspaceId      String   @unique
+  thresholdPaise   Int // trigger when wallet falls below this
+  amountPaise      Int // top-up amount
+  active           Boolean  @default(true)
+  paymentMethodRef String? // razorpay customer/token id for off-session charge
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model NumberRental {
+  id                String       @id @default(cuid())
+  workspaceId       String
+  phoneNumberId     String
+  monthlyPricePaise Int
+  marginPercent     Int          @default(20) // our margin over the Vobiz wholesale rent
+  status            RentalStatus @default(ACTIVE)
+  startedAt         DateTime     @default(now())
+  endedAt           DateTime?
+
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  phoneNumber PhoneNumber @relation(fields: [phoneNumberId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+model ResellerAccount {
+  id                String   @id @default(cuid())
+  parentWorkspaceId String   @unique // the agency workspace
+  wholesaleRateCard Json? // e.g. {"telephony_per_min_paise":45,"stt_per_min_paise":30,"tts_per_min_paise":40}
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+
+  parentWorkspace Workspace   @relation("ResellerParent", fields: [parentWorkspaceId], references: [id], onDelete: Cascade)
+  children        Workspace[] @relation("ResellerChildren")
+}
+
+model TrialState {
+  id                String    @id @default(cuid())
+  workspaceId       String    @unique
+  trialMinutesUsed  Int       @default(0)
+  trialMinutesLimit Int       @default(30)
+  kycStatus         KycStatus @default(NOT_STARTED) // trial is KYC-gated to prevent abuse (spec 10)
+  sandboxNumberId   String? // PhoneNumber id of the free sandbox DID
+  expiresAt         DateTime?
+  createdAt         DateTime  @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+// ---------- Compliance & Onboarding ----------
+
+enum KycStatus {
+  NOT_STARTED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum KycDocumentType {
+  GST
+  PAN
+  AADHAAR
+  INCORPORATION
+  OTHER
+}
+
+enum GdprRequestType {
+  EXPORT
+  ERASURE
+}
+
+enum GdprRequestStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  REJECTED
+}
+
+model RetentionPolicy {
+  id              String   @id @default(cuid())
+  workspaceId     String   @unique
+  recordingsDays  Int      @default(90) // auto-delete recordings after N days
+  transcriptsDays Int      @default(365) // auto-delete transcripts after N days
+  autoDelete      Boolean  @default(true)
+  updatedAt       DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model GdprRequest {
+  id           String            @id @default(cuid())
+  workspaceId  String
+  type         GdprRequestType
+  subjectPhone String? // the data subject (a caller/contact)
+  subjectEmail String?
+  status       GdprRequestStatus @default(PENDING)
+  resultKey    String? // MinIO key of the export archive (EXPORT only)
+  completedAt  DateTime?
+  createdAt    DateTime          @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, status])
+}
+
+model KycRecord {
+  id           String          @id @default(cuid())
+  workspaceId  String
+  documentType KycDocumentType
+  documentRef  String? // e.g. GSTIN / PAN number
+  storageKey   String? // MinIO key of the uploaded document
+  status       KycStatus       @default(PENDING)
+  reviewedAt   DateTime?
+  createdAt    DateTime        @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+model OnboardingState {
+  id                String    @id @default(cuid())
+  workspaceId       String    @unique
+  currentStep       Int       @default(0) // wizard position (spec 13: industry → template → KB → test call → number → live)
+  checklist         Json? // e.g. {"industry":true,"template":true,"knowledge":false,"test_call":false,"number":false}
+  sampleDataEnabled Boolean   @default(false)
+  completedAt       DateTime?
+  updatedAt         DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+// ---------- Auth: TOTP backup codes (guide 03) ----------
+model BackupCode {
+  id        String    @id @default(cuid())
+  userId    String
+  codeHash  String // sha256 hex of the normalized code; plaintext shown once
+  usedAt    DateTime? // single-use: set when consumed at login
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}

@@ -1,0 +1,68 @@
+# --- Local Command Code state ---
+.commandcode/
+
+# --- Secrets / env ---
+.env
+.env.*
+!.env.example
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+*.pem
+
+# --- Python (dograh) ---
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Node (vaani-ai, dograh) ---
+node_modules/
+/coverage
+/out/
+/build
+.next/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# --- Next.js / Vercel (vaani-ai) ---
+next-env.d.ts
+.vercel
+
+# --- Conductor / per-machine (dograh) ---
+.conductor/settings.local.toml
+.devcontainer/install.local.sh
+/run/
+/logs/
+infrastructure/
+prd/
+*.wav
+dograh_pcm_cache/
+.playwright-mcp
+coturn/
+
+# --- Brainstorm/mockup dirs (dograh) ---
+.superpowers/
+docs/superpowers/
+.gstack/
+
+# --- vaani scratch files ---
+*.local
+plan/*.draft.md
+
+# Backups of original nested .git dirs (not part of the repo)
+.git_backups/
