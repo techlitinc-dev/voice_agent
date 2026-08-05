@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatINR } from "@/lib/money";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { LiveTiles } from "./live-tiles";
 
 export default async function DashboardPage() {
   let ctx;
@@ -30,6 +31,7 @@ export default async function DashboardPage() {
           </form>
         </div>
       </div>
+      <LiveTiles />
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <Card>
           <CardHeader><CardTitle>Wallet balance</CardTitle></CardHeader>

@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { verifyDograhWebhook } from "@/lib/dograhWebhook";
 import { processCompletedCall } from "@/lib/postcall";
+import { emitWebhookEvent } from "@/lib/webhooks";
 
 type Data = Record<string, unknown>;
 
@@ -70,6 +71,9 @@ export async function POST(req: NextRequest) {
         },
       });
       await logEvent(call.id, "status", event, data);
+      await emitWebhookEvent(call.workspaceId, "call.started", {
+        callId: call.id, direction: call.direction, fromNumber: call.fromNumber, toNumber: call.toNumber,
+      });
       return NextResponse.json({ ok: true, created: call.id });
     }
     await db.call.update({
@@ -77,6 +81,9 @@ export async function POST(req: NextRequest) {
       data: { status: "IN_PROGRESS", answeredAt: new Date() },
     });
     await logEvent(call.id, "status", event, data);
+    await emitWebhookEvent(call.workspaceId, "call.started", {
+      callId: call.id, direction: call.direction, fromNumber: call.fromNumber, toNumber: call.toNumber,
+    });
     return NextResponse.json({ ok: true });
   }
 

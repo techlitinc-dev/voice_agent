@@ -56,3 +56,29 @@ export async function ingestRecording(sourceUrl: string, key: string): Promise<v
     "Content-Type": res.headers.get("content-type") ?? "audio/wav",
   });
 }
+
+/** Store a JSON document (GDPR export bundles). Added in guide 08. */
+export async function putJsonObject(key: string, value: unknown): Promise<void> {
+  await ensureBucket();
+  const buf = Buffer.from(JSON.stringify(value, null, 2), "utf8");
+  await s3.putObject(RECORDINGS_BUCKET, key, buf, buf.length, {
+    "Content-Type": "application/json",
+  });
+}
+
+/** Delete one object. Returns false (never throws) when the object is missing. Added in guide 08. */
+export async function deleteObject(key: string): Promise<boolean> {
+  await ensureBucket();
+  try {
+    await s3.removeObject(RECORDINGS_BUCKET, key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Presigned GET URL for any object in the bucket (GDPR export downloads), 15 min. Added in guide 08. */
+export async function objectUrl(key: string): Promise<string> {
+  await ensureBucket();
+  return s3.presignedGetObject(RECORDINGS_BUCKET, key, 15 * 60);
+}
