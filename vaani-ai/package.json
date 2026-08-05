@@ -13,7 +13,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "tsx prisma/seed.ts",
-    "worker": "tsx src/worker/index.ts",
+    "worker": "tsx --env-file=.env src/worker/index.ts",
     "worker:kb": "tsx src/worker/kb-reindex.ts",
     "worker:crm-sync": "tsx src/worker/crm-sync.ts"
   },
