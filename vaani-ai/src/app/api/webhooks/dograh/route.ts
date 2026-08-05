@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { verifyDograhWebhook } from "@/lib/dograhWebhook";
+import { processCompletedCall } from "@/lib/postcall";
 
 type Data = Record<string, unknown>;
 
@@ -102,6 +103,9 @@ export async function POST(req: NextRequest) {
       await db.call.update({ where: { id: call.id }, data: update });
     }
     await logEvent(call.id, "summary", event, data);
+    // Fire-and-forget post-call processing (outcome, entities, DNC, lead capture,
+    // voicemail, missed-call callback, fallback transfer, webhook fan-out).
+    processCompletedCall(call.id).catch((e) => console.error("postcall failed", e));
     return NextResponse.json({ ok: true });
   }
 
