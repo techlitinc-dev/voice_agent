@@ -9,6 +9,7 @@ import { AnalyticsCharts } from "./charts";
 
 export const dynamic = "force-dynamic";
 
+export const metadata = { title: "Analytics — Vaani AI" };
 export default async function AnalyticsPage() {
   let ctx;
   try { ctx = await requireWorkspace(); } catch { redirect("/login"); }

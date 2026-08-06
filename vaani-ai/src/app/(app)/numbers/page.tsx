@@ -17,6 +17,7 @@ const NUMBER_TYPES = [
   { value: "SERIES_1600", label: "1600 (service)" },
 ];
 
+export const metadata = { title: "Numbers — Vaani AI" };
 export default async function NumbersPage() {
   let ctx;
   try {

@@ -7,6 +7,7 @@ import { toggleDncAction } from "@/server/actions/contacts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
+export const metadata = { title: "Contacts — Vaani AI" };
 export default async function ContactsPage({
   searchParams,
 }: {

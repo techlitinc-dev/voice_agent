@@ -13,6 +13,7 @@ const STATUS_STYLE: Record<string, string> = {
   ARCHIVED: "bg-muted text-muted-foreground",
 };
 
+export const metadata = { title: "Agents — Vaani AI" };
 export default async function AgentsPage() {
   let ctx;
   try {

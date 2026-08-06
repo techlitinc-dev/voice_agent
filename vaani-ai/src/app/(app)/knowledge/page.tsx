@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireWorkspace } from "@/lib/auth";
 import { KnowledgeManager } from "./knowledge-manager";
 
+export const metadata = { title: "Knowledge — Vaani AI" };
 export default async function KnowledgePage() {
   let ctx;
   try {

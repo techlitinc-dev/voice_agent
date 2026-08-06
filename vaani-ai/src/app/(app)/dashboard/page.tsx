@@ -8,6 +8,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LiveTiles } from "./live-tiles";
 
+export const metadata = { title: "Dashboard — Vaani AI" };
 export default async function DashboardPage() {
   let ctx;
   try {

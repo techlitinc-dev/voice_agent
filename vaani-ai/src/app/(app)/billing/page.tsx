@@ -12,6 +12,7 @@ import { TopupButtons } from "./topup";
 
 export const dynamic = "force-dynamic";
 
+export const metadata = { title: "Billing — Vaani AI" };
 export default async function BillingPage() {
   let ctx;
   try { ctx = await requireWorkspace(); } catch { redirect("/login"); }

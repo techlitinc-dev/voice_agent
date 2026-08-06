@@ -28,6 +28,7 @@ function fmtDur(sec: number) {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
+export const metadata = { title: "Calls — Vaani AI" };
 export default async function CallsPage({
   searchParams,
 }: {

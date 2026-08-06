@@ -5,6 +5,7 @@ import { installTemplateAction, unpublishTemplateAction } from "@/server/actions
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
+export const metadata = { title: "Marketplace — Vaani AI" };
 export default async function MarketplacePage() {
   let ctx;
   try {

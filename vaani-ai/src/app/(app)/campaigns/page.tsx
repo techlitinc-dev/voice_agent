@@ -15,6 +15,7 @@ const STATUS_STYLE: Record<string, string> = {
   CANCELLED: "bg-red-500/10 text-red-400",
 };
 
+export const metadata = { title: "Campaigns — Vaani AI" };
 export default async function CampaignsPage() {
   let ctx;
   try { ctx = await requireWorkspace(); } catch { redirect("/login"); }
