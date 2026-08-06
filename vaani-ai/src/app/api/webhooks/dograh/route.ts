@@ -91,7 +91,9 @@ export async function POST(req: NextRequest) {
   const ended = event === "call.ended" || event === "call.completed";
   if (ended) {
     if (!call) {
-      return NextResponse.json({ ok: false, error: "unknown call" }, { status: 404 });
+      // Tolerant idempotent path: an ended event for a call we never saw (or a
+      // duplicate) is accepted, not an error — guide 11's burst test expects 200.
+      return NextResponse.json({ ok: true, ignored: true, error: "unknown call" });
     }
     const update: Prisma.CallUpdateInput = { status: "COMPLETED", endedAt: new Date() };
     const dur = num(data.duration_seconds);

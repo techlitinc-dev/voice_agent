@@ -25,14 +25,15 @@ export function EditorActions({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  async function run(label: string, fn: () => Promise<{ ok: boolean; error?: string; url?: string }>, openUrl = false) {
+  async function run(label: string, fn: () => Promise<{ ok: boolean; error?: string; url?: string }>, openUrl = false, goToVersions = false) {
     setBusy(label); setError(null); setNotice(null);
     const res = await fn();
     setBusy(null);
     if (!res.ok) return setError(res.error ?? "Failed.");
     setNotice(`${label} done.`);
-    if (openUrl && res.url) window.open(res.url, "_blank", "noopener");
-    router.refresh();
+    if (goToVersions) router.push(`/agents/${agentId}?tab=versions`);
+    else if (openUrl && res.url) window.open(res.url, "_blank", "noopener");
+    else router.refresh();
   }
 
   return (
@@ -42,7 +43,7 @@ export function EditorActions({
           size="sm"
           disabled={busy !== null}
           data-testid="agent-publish-btn"
-          onClick={() => run("Publish", () => publishAgentAction(agentId))}
+          onClick={() => run("Publish", () => publishAgentAction(agentId), false, true)}
         >
           {busy === "Publish" ? "Publishing…" : status === "PUBLISHED" ? "Publish new version" : "Publish"}
         </Button>

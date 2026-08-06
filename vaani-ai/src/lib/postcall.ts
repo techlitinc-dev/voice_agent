@@ -35,9 +35,27 @@ const OUTCOMES = [
   "payment-promised", "dispute", "dnc-requested", "other",
 ];
 
+/**
+ * Deterministic opt-out detector (spec §11 — never depend on the LLM for
+ * compliance). Fires on common EN/Hinglish "stop calling me" phrasing.
+ */
+const DNC_PHRASES = [
+  "stop calling me", "don't call me", "do not call me", "never call me",
+  "stop calling", "don't call again", "do not call again", "never call again",
+  "take me off your list", "remove my number", "remove me from",
+  "mujhe dobara call mat karna", "mujhe mat call karo", "dobara call mat karna",
+  "call mat karo", "phone mat karo", "baat mat karo",
+];
+function detectDncRequested(transcript: string): boolean {
+  const t = transcript.toLowerCase();
+  return DNC_PHRASES.some((p) => t.includes(p));
+}
+
 async function llmExtract(transcript: string): Promise<LlmResult> {
+  const dncFromText = detectDncRequested(transcript);
   const fallback: LlmResult = {
-    outcome: "completed", sentiment: "neutral", dncRequested: false,
+    outcome: dncFromText ? "dnc-requested" : "completed",
+    sentiment: "neutral", dncRequested: dncFromText,
     entities: {}, messageTaken: false, wantsHuman: false, misunderstandingCount: 0,
   };
   try {
@@ -71,10 +89,11 @@ async function llmExtract(transcript: string): Promise<LlmResult> {
     const json = await res.json();
     const text: string = json.choices?.[0]?.message?.content ?? "";
     const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+    const dncFromText = detectDncRequested(transcript);
     return {
-      outcome: OUTCOMES.includes(parsed.outcome) ? parsed.outcome : "other",
+      outcome: dncFromText || parsed.dncRequested === true ? "dnc-requested" : OUTCOMES.includes(parsed.outcome) ? parsed.outcome : "other",
       sentiment: ["positive", "neutral", "negative"].includes(parsed.sentiment) ? parsed.sentiment : "neutral",
-      dncRequested: parsed.dncRequested === true,
+      dncRequested: dncFromText || parsed.dncRequested === true,
       entities: typeof parsed.entities === "object" && parsed.entities !== null ? parsed.entities : {},
       messageTaken: parsed.messageTaken === true,
       wantsHuman: parsed.wantsHuman === true,

@@ -129,7 +129,7 @@ export async function changePlanAction(input: unknown): Promise<ActionResult> {
         workspaceId: ctx.workspaceId,
         amountPaise: plan.monthlyPricePaise,
         type: "PLAN_FEE",
-        note: `Plan: ${plan.name} (monthly, immediate upgrade)`,
+        note: `Subscription plan fee — ${plan.name} (monthly, immediate upgrade)`,
       });
     }
     revalidatePath("/billing");

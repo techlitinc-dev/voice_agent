@@ -114,7 +114,7 @@ export function NewCampaignForm(props: {
           <label className="block space-y-1">
             <span className="text-sm text-muted-foreground">Contact list</span>
             <select name="listId" required data-testid="list-select" className="h-9 w-full rounded-md border border-border bg-card px-3 text-sm">
-              {props.lists.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.count})</option>)}
+              {props.lists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
           </label>
           <label className="block space-y-1">

@@ -4,10 +4,11 @@ import { db } from "@/lib/db";
 import { requireWorkspace } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { formatINR } from "@/lib/money";
 import { financialYearTag } from "@/lib/invoice";
 import { trialMinutesRemaining } from "@/lib/trial";
-import { generateInvoiceNowAction } from "@/server/actions/billing";
+import { generateInvoiceNowAction, saveLowBalanceThresholdAction } from "@/server/actions/billing";
 import { TopupButtons } from "./topup";
 
 export const dynamic = "force-dynamic";
@@ -47,6 +48,12 @@ export default async function BillingPage() {
     await generateInvoiceNowAction();
   }
 
+  async function saveThreshold(formData: FormData) {
+    "use server";
+    const rupees = Number(formData.get("threshold") ?? 0);
+    await saveLowBalanceThresholdAction({ lowBalanceAlertPaise: Math.round(rupees * 100) });
+  }
+
   return (
     <div className="max-w-4xl space-y-6">
       <h1 className="text-2xl font-bold">Billing</h1>
@@ -70,6 +77,13 @@ export default async function BillingPage() {
           <CardContent>
             <p data-testid="wallet-balance" className="text-4xl font-bold text-primary">{formatINR(balance)}</p>
             <p className="mt-1 text-xs text-muted-foreground">Low-balance alert at {formatINR(lowThreshold)}</p>
+            <form data-testid="threshold-form" action={saveThreshold} className="mt-3 flex items-end gap-2">
+              <div className="flex-1">
+                <label className="text-xs text-muted-foreground">Alert when balance falls below (₹)</label>
+                <Input data-testid="threshold-input" name="threshold" type="number" min={0} defaultValue={Math.round(lowThreshold / 100)} />
+              </div>
+              <Button data-testid="threshold-save" variant="outline" size="sm">Save</Button>
+            </form>
           </CardContent>
         </Card>
         <Card>
@@ -172,7 +186,7 @@ export default async function BillingPage() {
             <thead>
               <tr className="border-b text-left text-muted-foreground">
                 <th className="p-3">When</th><th className="p-3">Taxable</th><th className="p-3">GST</th>
-                <th className="p-3">Total</th><th className="p-3">Status</th><th className="p-3">View</th>
+                <th className="p-3">Total</th><th className="p-3">HSN/SAC</th><th className="p-3">Status</th><th className="p-3">View</th>
               </tr>
             </thead>
             <tbody>
@@ -182,6 +196,7 @@ export default async function BillingPage() {
                   <td className="p-3">{formatINR(i.amountPaise)}</td>
                   <td className="p-3">{formatINR(i.gstPaise)}</td>
                   <td className="p-3 font-semibold">{formatINR(i.amountPaise + i.gstPaise)}</td>
+                  <td className="p-3 font-mono text-xs">{i.hsnSac ?? "998314"}</td>
                   <td className={`p-3 ${i.status === "paid" ? "text-green-400" : i.status === "failed" ? "text-red-400" : "text-yellow-400"}`}>
                     {i.status}
                   </td>

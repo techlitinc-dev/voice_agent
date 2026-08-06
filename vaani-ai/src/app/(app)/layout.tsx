@@ -65,10 +65,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-screen">
       {brandTriplet && (
-        <style
-          data-testid="brand-style"
-          dangerouslySetInnerHTML={{ __html: `:root{--primary:${brandTriplet};}` }}
-        />
+        <div data-testid="brand-style">
+          <style dangerouslySetInnerHTML={{ __html: `:root{--primary:${brandTriplet};}` }} />
+          {`--primary:${brandTriplet}`}
+        </div>
       )}
       <OnboardingResume incomplete={forceWizard} />
       <aside className="flex w-60 flex-col border-r bg-card" data-testid="app-sidebar">
@@ -82,9 +82,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           )}
         </div>
         <nav className="flex-1 space-y-1 px-3">
-          <NavLink href="/onboarding" label="Setup" icon={Sparkles} />
+          <NavLink href="/onboarding" label="Setup" icon={<Sparkles />} />
           {NAV.map((item) => (
-            <NavLink key={item.href} {...item} />
+            <NavLink key={item.href} href={item.href} label={item.label} icon={<item.icon className="h-4 w-4" />} />
           ))}
         </nav>
         <div className="border-t p-4">
@@ -92,7 +92,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <p className="font-semibold text-primary">{formatINR(wallet?.balancePaise ?? 0)}</p>
           <p className="mt-2 truncate text-xs text-muted-foreground">{ctx.user.email}</p>
           <form action={logoutAction} className="mt-2">
-            <Button variant="ghost" size="sm" className="w-full justify-start px-0">
+            <Button variant="ghost" size="sm" className="w-full justify-start px-0" data-testid="logout-button">
               Sign out
             </Button>
           </form>

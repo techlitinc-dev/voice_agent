@@ -1,5 +1,4 @@
 import { requireWorkspace } from "@/lib/auth";
-import { logoutAction } from "@/server/actions/auth";
 import { db } from "@/lib/db";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,9 +26,6 @@ export default async function DashboardPage() {
           <Link href="/settings/members">
             <Button variant="outline" size="sm">Settings</Button>
           </Link>
-          <form action={logoutAction}>
-            <Button data-testid="logout-button" variant="outline" size="sm">Sign out</Button>
-          </form>
         </div>
       </div>
       <LiveTiles />

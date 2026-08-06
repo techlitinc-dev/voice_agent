@@ -12,7 +12,11 @@ export async function GET() {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
   const calls = await db.call.findMany({
-    where: { workspaceId: ctx.workspaceId, status: { in: ["RINGING", "IN_PROGRESS"] } },
+    where: {
+      workspaceId: ctx.workspaceId,
+      status: { in: ["RINGING", "IN_PROGRESS"] },
+      liveState: { isNot: null }, // HITL dashboard shows calls with active live state
+    },
     include: {
       liveState: true,
       agent: { select: { name: true } },

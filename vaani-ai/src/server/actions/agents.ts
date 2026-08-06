@@ -329,6 +329,11 @@ export async function publishAgentAction(agentId: string, label?: string): Promi
       where: { agentId: agent.id, workspaceId: ctx.workspaceId, isAbVariant: true, status: "PUBLISHED" },
       data: { status: "ARCHIVED" },
     });
+    // Demote the previous live main version so rollback has a target (guide 11).
+    await db.agentVersion.updateMany({
+      where: { agentId: agent.id, workspaceId: ctx.workspaceId, isAbVariant: false, status: "PUBLISHED" },
+      data: { status: "DRAFT" },
+    });
 
     const pushed = await pushToDograh(null, agent.name, definition as Record<string, unknown>, agent.maxCallSeconds);
 
