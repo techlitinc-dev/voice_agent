@@ -42,6 +42,12 @@ function requestIp(): string | null {
   return h.get("x-real-ip");
 }
 
+/** True when the request arrived over HTTPS (Caddy sets x-forwarded-proto). */
+function isSecureRequest(): boolean {
+  const proto = headers().get("x-forwarded-proto")?.split(",")[0]?.trim();
+  return proto === "https";
+}
+
 /** Create a DB session + signed cookie. Captures device/IP for the sessions page. */
 export async function createSession(userId: string, activeWorkspaceId?: string) {
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
@@ -68,7 +74,7 @@ export async function createSession(userId: string, activeWorkspaceId?: string) 
   cookies().set(COOKIE_NAME, value, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: isSecureRequest(),
     path: "/",
     expires: expiresAt,
   });

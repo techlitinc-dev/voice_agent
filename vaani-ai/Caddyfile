@@ -7,8 +7,40 @@
 	on_demand_tls {
 		ask http://app:3000/api/domain-ask
 	}
+
+	# Serve plain HTTP on port 80 (below) without Caddy auto-redirecting it to
+	# HTTPS. HTTPS still works on 443 for {$DOMAIN} and on-demand custom domains.
+	auto_https disable_redirects
 }
 
+# The server's public IP — served over plain HTTP so the app is reachable from
+# anywhere without a domain or TLS cert. Add more http://<host> blocks here as
+# needed (Caddy v2.11 does not match bare IPs against a http://* catch-all).
+# NOTE: keep this in sync with .env (PUBLIC_IP) — there is no single source.
+http://65.20.76.84 {
+	reverse_proxy app:3000
+	encode gzip
+	log {
+		output file /data/access.log {
+			roll_size 50mb
+			roll_keep 5
+		}
+	}
+}
+
+# Plain HTTP for localhost — lets local dev/host access work without a cert.
+http://localhost {
+	reverse_proxy app:3000
+	encode gzip
+	log {
+		output file /data/access.log {
+			roll_size 50mb
+			roll_keep 5
+		}
+	}
+}
+
+# HTTPS for the configured DOMAIN — Caddy auto-issues a Let's Encrypt cert.
 {$DOMAIN} {
 	reverse_proxy app:3000
 	encode gzip
