@@ -74,16 +74,13 @@ export function AppConfigProvider({ children }: { children: ReactNode }) {
                 : null;
 
             // createClientConfig seeds the API client base URL before /health is
-            // known. Now that the backend has reported the endpoint it runs on,
-            // re-apply the single browser→API preference order so all SDK calls
-            // (and anything reading client.getConfig().baseUrl) hit it directly —
-            // window.location.origin would be wrong when the API is served from a
-            // different host/port. resolveBrowserBackendUrl keeps NEXT_PUBLIC_BACKEND_URL
-            // ahead of the reported endpoint. Guard on a present endpoint so a
-            // transient /health failure never downgrades a good base URL to origin.
-            if (backendApiEndpoint) {
-                client.setConfig({ baseUrl: resolveBrowserBackendUrl(backendApiEndpoint) });
-            }
+            // known (NEXT_PUBLIC_BACKEND_URL if set, else same-origin). Once
+            // /health resolves, re-apply the browser→API preference so the SDK
+            // client always reflects the final value. The backend-reported
+            // endpoint is deliberately NOT applied to the browser client: it may
+            // be a localhost/private address unreachable from the browser (the
+            // UI serves a same-origin /api/v1/* proxy for the browser path).
+            client.setConfig({ baseUrl: resolveBrowserBackendUrl() });
 
             setConfig({
                 uiVersion: data.ui || 'dev',

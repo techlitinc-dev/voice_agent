@@ -42,6 +42,14 @@ ENV NEXT_PUBLIC_CHATWOOT_URL="https://chat.dograh.com"
 ENV NEXT_PUBLIC_CHATWOOT_TOKEN="3fkFx2mCEjNHjM9gaNc4A82X"
 ENV BACKEND_URL="http://api:8000"
 
+# Browser-side backend URL. Leave unset to use the UI's own origin
+# (window.location.origin) — the browser then reaches the backend through the
+# same-origin /api/v1/* proxy route (app/api/v1/[...path]). Set only for a
+# split deployment where the browser should reach the API directly at a public
+# host:port.
+ARG NEXT_PUBLIC_BACKEND_URL=""
+ENV NEXT_PUBLIC_BACKEND_URL="${NEXT_PUBLIC_BACKEND_URL}"
+
 # Build the application with standalone mode
 # Increase Node.js heap size to prevent out-of-memory errors during build
 ENV NODE_OPTIONS="--max-old-space-size=4096"

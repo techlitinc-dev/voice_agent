@@ -9,23 +9,22 @@ export function getServerBackendUrl() {
  * Resolve the base URL the browser should use to reach the backend API.
  *
  * Precedence:
- *   1. NEXT_PUBLIC_BACKEND_URL — explicit build-time operator config, always wins.
- *   2. backendApiEndpoint — the URL the backend reports it is running on via /health
- *      (surfaced through AppConfigContext). This is the address the browser actually
- *      reaches the backend at; for a backend on a private IP it is that private IP.
- *      Unknown at module init, so createClientConfig seeds without it and
- *      AppConfigProvider upgrades the client once /health resolves.
- *   3. window.location.origin — same-origin public deployment.
+ *   1. NEXT_PUBLIC_BACKEND_URL — explicit build-time operator config, always wins
+ *      (e.g. a split deployment where the browser reaches the API at a public
+ *      host:port rather than through the UI's same-origin proxy).
+ *   2. window.location.origin — the origin the page was loaded from. The browser
+ *      is guaranteed to reach it, and the UI serves a same-origin /api/v1/*
+ *      proxy route (app/api/v1/[...path]) that forwards to the backend.
  *
- * This is the browser→API order. It is intentionally NOT tunnel-aware: the
- * Cloudflare tunnel URL is only for externally-hosted consumers (telephony
- * webhooks, MCP, external API triggers) that cannot reach a private IP — see
- * resolveWebhookBaseUrl.
+ * The /health backend_api_endpoint is intentionally NOT used for the browser's
+ * API client: the backend may report a localhost/private address (e.g.
+ * http://localhost:8000) that is unreachable from a browser which loaded the UI
+ * from a different host/port. That endpoint is for external consumers
+ * (webhooks, telephony) — see resolveWebhookBaseUrl.
  */
-export function resolveBrowserBackendUrl(backendApiEndpoint?: string | null): string {
+export function resolveBrowserBackendUrl(_backendApiEndpoint?: string | null): string {
     return (
         process.env.NEXT_PUBLIC_BACKEND_URL ||
-        backendApiEndpoint ||
         (typeof window !== 'undefined' ? window.location.origin : '')
     );
 }

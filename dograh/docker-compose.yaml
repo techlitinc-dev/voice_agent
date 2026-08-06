@@ -278,6 +278,14 @@ services:
 
       # Server-side URL (SSR, internal Docker network)
       BACKEND_URL: "${BACKEND_URL:-http://api:8000}"
+
+      # Browser-side backend URL. Leave unset to use the UI's own origin — the
+      # browser reaches the backend through the same-origin /api/v1/* proxy
+      # route (app/api/v1/[...path]) instead of hitting the API host/port
+      # directly. This is baked in at UI image build time (ui/Dockerfile ARG);
+      # set here only for a split deployment where the browser should reach the
+      # API directly.
+      NEXT_PUBLIC_BACKEND_URL: "${NEXT_PUBLIC_BACKEND_URL:-}"
       NODE_ENV: "oss"
 
       # Flag to enable/ disable posthog
