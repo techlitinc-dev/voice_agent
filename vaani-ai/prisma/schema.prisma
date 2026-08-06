@@ -89,6 +89,11 @@ model Workspace {
   autoTopUp            AutoTopUp?
   numberRentals        NumberRental[]
   trialState           TrialState?
+  addOnPurchases       AddOnPurchase[]
+  // GST billing profile (B2B invoices, spec 10) — set from /billing/settings
+  billingGstin         String?
+  billingPlaceOfSupply String? // e.g. "Karnataka (29)"
+  billingHsnSac        String? // e.g. "998314"
   resellerAccount      ResellerAccount?      @relation("ResellerParent") // set if this workspace IS a reseller parent
   retentionPolicy      RetentionPolicy?
   gdprRequests         GdprRequest[]
@@ -1058,6 +1063,8 @@ enum TxnType {
   NUMBER_RENT
   REFUND
   TRIAL_CREDIT
+  ADDON_DEBIT
+  PLAN_FEE
 }
 
 model WalletTransaction {
@@ -1260,4 +1267,21 @@ model BackupCode {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// ---------- Billing add-ons (guide 09) ----------
+
+model AddOnPurchase {
+  id                String   @id @default(cuid())
+  workspaceId       String
+  code              String   // extra_line | premium_voices | white_label | dedicated_infra
+  monthlyPricePaise Int
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  cancelledAt       DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, code])
+  @@index([workspaceId])
 }

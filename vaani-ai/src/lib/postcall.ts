@@ -4,6 +4,7 @@ import { pushLeadToCrm } from "./crmPush";
 import { recordVoicemailMessage } from "./voicemail";
 import { notifyStaffMessage } from "./notify";
 import { emitWebhookEvent } from "./webhooks";
+import { billCall } from "./billing";
 import { enqueueCallbackDial } from "./dialJobs";
 import { parseHumanTransferConfig, decideTransfer } from "./fallbackPolicy";
 
@@ -123,6 +124,16 @@ export async function processCompletedCall(callId: string, hints: PostCallHints 
     include: { agent: { include: { toolConfigs: true } } },
   });
   if (!call) return;
+
+  // Meter FIRST (guide 09): wholesale rate card + plan markup → trial minutes or
+  // wallet debit. Runs before every early return so answered calls without a
+  // transcript (STT failure) are still billed. No-ops on unanswered calls
+  // (durationSec = 0). Billing failures must never break post-call processing.
+  try {
+    await billCall(call.id);
+  } catch (e) {
+    console.error("billing failed for call", call.id, e);
+  }
 
   // --- Missed-call path: inbound call that never got answered -----------------
   if (

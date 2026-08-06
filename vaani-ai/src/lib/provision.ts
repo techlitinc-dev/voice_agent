@@ -57,6 +57,15 @@ export async function provisionUserWithWorkspace(input: {
       where: { id: wallet.id },
       data: { balancePaise: 100000 },
     });
+    // Free trial (spec §10): 30 trial minutes, 14 days, KYC-gated (guide 09).
+    await tx.trialState.create({
+      data: {
+        workspaceId: workspace.id,
+        trialMinutesLimit: 30,
+        kycStatus: "NOT_STARTED",
+        expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+      },
+    });
     return { user, workspace };
   });
 }

@@ -6,6 +6,7 @@ import { NumberType } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { audit } from "@/lib/audit";
+import { kycGateError } from "@/lib/trial";
 
 export type ActionResult = { ok: boolean; error?: string };
 
@@ -23,9 +24,27 @@ export async function registerNumberAction(input: unknown): Promise<ActionResult
     if (!parsed.success) {
       return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid number." };
     }
-    await db.phoneNumber.create({
+    // KYC gate (spec §10/§13): 140/1600 series require a VERIFIED KycStatus.
+    const kycError = kycGateError(
+      parsed.data.numberType,
+      (await db.trialState.findUnique({ where: { workspaceId: ctx.workspaceId } }))?.kycStatus ?? null
+    );
+    if (kycError) return { ok: false, error: kycError };
+
+    const created = await db.phoneNumber.create({
       data: { ...parsed.data, workspaceId: ctx.workspaceId },
     });
+    // Monthly rental record (guide 09 cron bills it; margin already inside rent).
+    if (created.monthlyRentPaise > 0) {
+      await db.numberRental.create({
+        data: {
+          workspaceId: ctx.workspaceId,
+          phoneNumberId: created.id,
+          monthlyPricePaise: created.monthlyRentPaise,
+          marginPercent: 20,
+        },
+      });
+    }
     await audit({
       workspaceId: ctx.workspaceId, userId: ctx.user.id,
       action: "number.register", entity: "PhoneNumber",

@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { formatINR } from "@/lib/money";
 import {
   LayoutDashboard, Bot, PhoneOutgoing, Users, PhoneCall, Phone, BarChart3, Wallet, Settings, Store, BookOpen,
-  Radio, ArrowRightLeft, PhoneForwarded,
+  Radio, ArrowRightLeft, PhoneForwarded, HandCoins,
 } from "lucide-react";
 
 const NAV = [
@@ -24,6 +24,7 @@ const NAV = [
   { href: "/numbers", label: "Numbers", icon: Phone },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/billing", label: "Billing", icon: Wallet },
+  { href: "/reseller", label: "Reseller", icon: HandCoins },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

@@ -15,6 +15,13 @@ import { DIAL_JOB, CALLBACK_DIAL_JOB, MANUAL_DIAL_JOB } from "../lib/queue";
 import { schedulerTick } from "./campaignTick";
 import { dialJob, callbackDialJob, manualDialJob, whatsappSendJob } from "./dial";
 import { resetDailyCaps, sweepDueCallbacks, sweepPostCalls } from "./maintenance";
+import {
+  chargeMonthlyRentals,
+  chargeMonthlyAddOns,
+  chargeMonthlyPlanFees,
+  generateAllMonthlyInvoices,
+} from "./billing";
+import { runAutoTopUpSweep } from "../lib/autotopup";
 import { db } from "../lib/db";
 import { ingestRecording } from "../lib/storage";
 import { postCallSweep } from "./postcall";
@@ -102,6 +109,20 @@ async function main() {
   });
   cron.schedule("0 3 * * *", () => {
     resetDailyCaps().catch((e) => console.error("[cron] resetDailyCaps", e));
+  });
+
+  // Billing (guide 09): monthly charges on the 1st; auto-top-up sweep every 15 min.
+  // All monthly debits are idempotent via fixed ledger references — overlap-safe.
+  cron.schedule("15 3 1 * *", () => {
+    chargeMonthlyRentals().catch((e) => console.error("[cron] chargeMonthlyRentals", e));
+    chargeMonthlyAddOns().catch((e) => console.error("[cron] chargeMonthlyAddOns", e));
+    chargeMonthlyPlanFees().catch((e) => console.error("[cron] chargeMonthlyPlanFees", e));
+  });
+  cron.schedule("30 4 1 * *", () => {
+    generateAllMonthlyInvoices().catch((e) => console.error("[cron] generateAllMonthlyInvoices", e));
+  });
+  cron.schedule("*/15 * * * *", () => {
+    runAutoTopUpSweep().catch((e) => console.error("[cron] runAutoTopUpSweep", e));
   });
 
   log("worker ready — scheduler + dialer + whatsapp + cron (callbacks, post-call, nightly cap reset)");
