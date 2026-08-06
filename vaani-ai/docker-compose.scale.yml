@@ -1,0 +1,24 @@
+# Extra dialer-only workers. Usage:
+#   docker compose -f docker-compose.prod.yml -f docker-compose.scale.yml up -d
+# BullMQ spreads dial jobs across vaani-worker + these replicas. Crons do NOT run
+# here (RUN_CRON=false) — no overlap with the primary worker.
+services:
+  worker-scale:
+    image: vaani-app:latest
+    restart: unless-stopped
+    command: ["npx", "tsx", "src/worker/index.ts"]
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      RUN_CRON: "false"
+      DATABASE_URL: postgresql://vaani:${DB_PASSWORD}@db:5432/vaani?connection_limit=5
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://minio:9000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    deploy:
+      replicas: 2
+    networks: [internal]

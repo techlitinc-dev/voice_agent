@@ -1,0 +1,125 @@
+services:
+  app:
+    image: vaani-app:latest
+    container_name: vaani-app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      RUN_CRON: "false"   # the app process never runs worker crons
+      DATABASE_URL: postgresql://vaani:${DB_PASSWORD}@db:5432/vaani?connection_limit=10
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://minio:9000
+      APP_URL: https://${DOMAIN}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks: [internal, web]
+
+  worker:
+    image: vaani-app:latest
+    container_name: vaani-worker
+    restart: unless-stopped
+    command: ["npx", "tsx", "src/worker/index.ts"]
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      RUN_CRON: "true"    # THE only container allowed to run node-cron/intervals
+      DATABASE_URL: postgresql://vaani:${DB_PASSWORD}@db:5432/vaani?connection_limit=10
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://minio:9000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [internal]
+
+  kb-reindex:
+    image: vaani-app:latest
+    container_name: vaani-kb-reindex
+    restart: unless-stopped
+    command: ["npm", "run", "worker:kb"]
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      RUN_CRON: "true"
+      DATABASE_URL: postgresql://vaani:${DB_PASSWORD}@db:5432/vaani?connection_limit=5
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://minio:9000
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [internal]
+
+  db:
+    image: postgres:16
+    container_name: vaani-db-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vaani
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: vaani
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vaani -d vaani"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks: [internal]
+
+  redis:
+    image: redis:7
+    container_name: vaani-redis-prod
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks: [internal]
+
+  minio:
+    image: minio/minio:latest
+    container_name: vaani-minio-prod
+    restart: unless-stopped
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: vaani
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD}
+    volumes:
+      - miniodata_prod:/data
+    networks: [internal]
+
+  caddy:
+    image: caddy:2
+    container_name: vaani-caddy
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    networks: [web, internal]
+    depends_on: [app]
+
+networks:
+  internal: {}   # no inbound from outside
+  web: {}
+
+volumes:
+  pgdata_prod:
+  miniodata_prod:
+  caddy_data:

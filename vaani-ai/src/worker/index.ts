@@ -60,6 +60,9 @@ async function main() {
   log(`worker starting (CAMPAIGN_DRY_RUN=${DRY_RUN}, TRAI_HOURS_ENFORCE=${process.env.TRAI_HOURS_ENFORCE ?? "true"}, REQUIRE_CONSENT=${process.env.REQUIRE_CONSENT_FOR_PROMOTIONAL ?? "false"})`);
   const connection = createRedisConnection();
 
+  // Cron/interval registrations run ONLY on the primary worker (guide 12 scaling).
+  const RUN_CRON = process.env.RUN_CRON !== "false";
+
   new Worker(QUEUES.scheduler, schedulerTick, { connection, concurrency: 5 });
 
   new Worker<DialJobData | CallbackDialJobData | ManualDialJobData>(
@@ -85,45 +88,51 @@ async function main() {
     limiter: { max: 5, duration: 1000 }, // 5 msgs/sec — provider-friendly throttle
   });
 
-  setInterval(() => {
-    recordingSweeper().catch((e) => console.error("[recordings] sweep error", e));
-  }, 60_000);
+  if (RUN_CRON) {
+    setInterval(() => {
+      recordingSweeper().catch((e) => console.error("[recordings] sweep error", e));
+    }, 60_000);
 
-  setInterval(() => {
-    postCallSweep().catch((e) => console.error("[postcall] sweep error", e));
-  }, 45_000);
+    setInterval(() => {
+      postCallSweep().catch((e) => console.error("[postcall] sweep error", e));
+    }, 45_000);
 
-  setInterval(() => {
-    deliverWebhooks().catch((e) => console.error("[webhooks] delivery error", e));
-  }, Number(process.env.WEBHOOK_RETRY_INTERVAL_MS ?? 15_000));
+    setInterval(() => {
+      deliverWebhooks().catch((e) => console.error("[webhooks] delivery error", e));
+    }, Number(process.env.WEBHOOK_RETRY_INTERVAL_MS ?? 15_000));
 
-  startCronJobs();
+    startCronJobs();
 
-  setInterval(() => {
-    gdprSweep().catch((e) => console.error("[gdpr] sweep error", e));
-  }, 60_000);
+    setInterval(() => {
+      gdprSweep().catch((e) => console.error("[gdpr] sweep error", e));
+    }, 60_000);
+  }
 
-  cron.schedule("* * * * *", () => {
-    sweepDueCallbacks().catch((e) => console.error("[cron] sweepDueCallbacks", e));
-    sweepPostCalls().catch((e) => console.error("[cron] sweepPostCalls", e));
-  });
-  cron.schedule("0 3 * * *", () => {
-    resetDailyCaps().catch((e) => console.error("[cron] resetDailyCaps", e));
-  });
+  if (RUN_CRON) {
+    cron.schedule("* * * * *", () => {
+      sweepDueCallbacks().catch((e) => console.error("[cron] sweepDueCallbacks", e));
+      sweepPostCalls().catch((e) => console.error("[cron] sweepPostCalls", e));
+    });
+    cron.schedule("0 3 * * *", () => {
+      resetDailyCaps().catch((e) => console.error("[cron] resetDailyCaps", e));
+    });
+  }
 
   // Billing (guide 09): monthly charges on the 1st; auto-top-up sweep every 15 min.
   // All monthly debits are idempotent via fixed ledger references — overlap-safe.
-  cron.schedule("15 3 1 * *", () => {
-    chargeMonthlyRentals().catch((e) => console.error("[cron] chargeMonthlyRentals", e));
-    chargeMonthlyAddOns().catch((e) => console.error("[cron] chargeMonthlyAddOns", e));
-    chargeMonthlyPlanFees().catch((e) => console.error("[cron] chargeMonthlyPlanFees", e));
-  });
-  cron.schedule("30 4 1 * *", () => {
-    generateAllMonthlyInvoices().catch((e) => console.error("[cron] generateAllMonthlyInvoices", e));
-  });
-  cron.schedule("*/15 * * * *", () => {
-    runAutoTopUpSweep().catch((e) => console.error("[cron] runAutoTopUpSweep", e));
-  });
+  if (RUN_CRON) {
+    cron.schedule("15 3 1 * *", () => {
+      chargeMonthlyRentals().catch((e) => console.error("[cron] chargeMonthlyRentals", e));
+      chargeMonthlyAddOns().catch((e) => console.error("[cron] chargeMonthlyAddOns", e));
+      chargeMonthlyPlanFees().catch((e) => console.error("[cron] chargeMonthlyPlanFees", e));
+    });
+    cron.schedule("30 4 1 * *", () => {
+      generateAllMonthlyInvoices().catch((e) => console.error("[cron] generateAllMonthlyInvoices", e));
+    });
+    cron.schedule("*/15 * * * *", () => {
+      runAutoTopUpSweep().catch((e) => console.error("[cron] runAutoTopUpSweep", e));
+    });
+  }
 
   log("worker ready — scheduler + dialer + whatsapp + cron (callbacks, post-call, nightly cap reset)");
 }
