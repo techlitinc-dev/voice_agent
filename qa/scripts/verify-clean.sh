@@ -11,10 +11,13 @@ log() { printf '[clean] %s\n' "$*"; }
 fail() { echo "CLEAN_FAILED:$1"; exit 2; }
 
 # 1. ports must be free (tests start their own servers)
-for port in 3000 3001 8000 9229; do
+#    The QA dograh listens on DOGRAH_QA_PORT (default 8100); a production dograh
+#    may legitimately hold :8000, so that is not checked.
+DOGRAH_QA_PORT="${DOGRAH_QA_PORT:-8100}"
+for port in 3000 3001 "$DOGRAH_QA_PORT" 9229; do
   if (command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | grep -q ":$port ") \
      || (command -v lsof >/dev/null 2>&1 && lsof -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1); then
-    fail "port_${port}_in_use"
+    fail "port_$port_in_use"
   fi
 done
 log "test ports free"

@@ -35,13 +35,14 @@ test.describe("outbound campaigns (guide 07)", () => {
     await page.getByTestId("resume-button").click();
     await expect(page.getByTestId("campaign-status-pill")).toHaveText("RUNNING", { timeout: 15_000 });
 
-    // 4. Live status rows as the dry-run worker dials (polls; allow 60s)
+    // 4. Live status rows as the dry-run worker dials (polls; allow 120s for the
+    //    BullMQ scheduler tick + dry-run dial to land)
     await expect(page.getByTestId("live-status-table")).toBeVisible();
     await expect(async () => {
       await page.reload();
       const rows = await page.getByTestId("live-status-row").count();
       expect(rows).toBeGreaterThan(0);
-    }).toPass({ timeout: 60_000, intervals: [5_000] });
+    }).toPass({ timeout: 120_000, intervals: [5_000] });
 
     // 5. Mid-flight script edit (guide 07: edit while RUNNING)
     await page.getByTestId("edit-opening-hook").fill(`E2E hook edited ${tag}`);

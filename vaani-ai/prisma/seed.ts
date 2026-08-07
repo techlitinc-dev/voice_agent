@@ -120,8 +120,10 @@ async function main() {
     },
   });
 
-  await db.workspaceInvite.create({
-    data: {
+  await db.workspaceInvite.upsert({
+    where: { token: "demo-invite-token-001" },
+    update: {},
+    create: {
       workspaceId: workspace.id,
       email: "receptionist@democlinic.example",
       role: "AGENT",
@@ -138,8 +140,10 @@ async function main() {
     create: { userId: user.id, secret: "JBSWY3DPEHPK3PXP", status: "PENDING" },
   });
 
-  await db.ssoIdentity.create({
-    data: {
+  await db.ssoIdentity.upsert({
+    where: { provider_externalSubjectId: { provider: "GOOGLE", externalSubjectId: "google-sub-demo-0001" } },
+    update: {},
+    create: {
       userId: user.id,
       provider: "GOOGLE",
       externalSubjectId: "google-sub-demo-0001",
@@ -147,6 +151,17 @@ async function main() {
     },
   });
 
+  // --- Demo content (agent, calls, campaigns, ...) ---
+  // Idempotency guard: the demo content is created once. A re-run (e.g. phase 6
+  // smoke-seed) must not collide on its unique keys, so skip it if the demo
+  // agent already exists.
+  const existingDemoAgent = await db.agent.findFirst({
+    where: { workspaceId: workspace.id, template: "clinic-receptionist" },
+    select: { id: true },
+  });
+  if (existingDemoAgent) {
+    console.log("demo content already seeded — skipping content section");
+  } else {
   // --- Demo agent (template: clinic receptionist) ---
   const agent = await db.agent.create({
     data: {
@@ -663,6 +678,8 @@ clinic manager call back. End every call by summarizing what was agreed.`,
       metadata: { seed: true },
     },
   });
+
+  } // end demo-content else (idempotent seed guard)
 
   console.log("Seed complete:");
   console.log("  login:     demo@vaani.ai / demo1234");

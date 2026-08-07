@@ -5,7 +5,11 @@ test.describe("event webhooks (guide 08)", () => {
   test("create subscription → send test event → signed SUCCESS delivery", async ({ page }) => {
     await loginDemo(page);
 
-    // 1. Create a subscription via the UI.
+    // 1. Create a subscription via the UI. Clear any residual subscriptions for
+    //    the test URL first so the strict-mode table locator matches exactly one row.
+    psql(`DELETE FROM "WebhookDelivery" WHERE "subscriptionId" IN
+      (SELECT id FROM "WebhookSubscription" WHERE url='http://localhost:4777/hook');`);
+    psql(`DELETE FROM "WebhookSubscription" WHERE url='http://localhost:4777/hook';`);
     await page.goto("/settings/webhooks");
     await page.getByTestId("webhook-url-input").fill("http://localhost:4777/hook");
     await page.locator('input[name="events"]').first().check();

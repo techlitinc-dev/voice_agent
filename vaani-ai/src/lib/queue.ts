@@ -4,7 +4,15 @@ import IORedis from "ioredis";
 const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
 
 export function createRedisConnection() {
-  return new IORedis(REDIS_URL, { maxRetriesPerRequest: null });
+  const conn = new IORedis(REDIS_URL, { maxRetriesPerRequest: null });
+  // A redis outage must not crash the process: ioredis emits 'error' on
+  // connection failures and reconnects automatically (maxRetriesPerRequest:
+  // null keeps commands queued during the outage). Swallow + log so BullMQ
+  // producers/consumers degrade instead of dying (phase 4 perf-degradation).
+  conn.on("error", (err) => {
+    console.error(`[redis] connection error: ${err.message}`);
+  });
+  return conn;
 }
 
 export const QUEUES = {

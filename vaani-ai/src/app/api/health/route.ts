@@ -33,6 +33,11 @@ export async function GET() {
       connectTimeout: 1500,
       maxRetriesPerRequest: 0,
     });
+    // Without a handler ioredis emits an unhandled 'error' that crashes the
+    // process when redis is down (phase 4 perf-degradation expects a 503, not
+    // a crash). The connection failure surfaces via the connect()/ping()
+    // rejection; this handler just prevents the process-level crash.
+    r.on("error", () => {});
     try {
       await r.connect();
       await r.ping();

@@ -35,6 +35,7 @@ test.describe("agent lifecycle (guide 05)", () => {
     await page.getByTestId("ab-traffic-input").fill("20");
     await page.getByTestId("ab-create-btn").click();
     await expect(page.getByTestId("version-history-table")).toContainText("20", { timeout: 30_000 });
+    await expect(page.getByTestId("ab-remove-btn")).toBeVisible({ timeout: 15_000 });
     await page.getByTestId("ab-remove-btn").click();
     await expect(page.getByTestId("ab-remove-btn")).toBeHidden({ timeout: 15_000 });
   });

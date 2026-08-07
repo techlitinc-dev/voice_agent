@@ -32,6 +32,22 @@ if [[ ! -d "$REPO_ROOT/dograh/.venv" ]]; then
 fi
 log "dograh venv present"
 
+# 3b. Ensure the dograh venv has its test deps. The QA suite runs dograh's
+#     pytest suite and boots dograh from this venv; without deps it fails with
+#     "No module named pytest". The install set mirrors dograh's own
+#     setup_requirements.sh extras plus the pytest stack.
+if ! "$REPO_ROOT/dograh/.venv/bin/python" -m pytest --version >/dev/null 2>&1; then
+  log "installing dograh test deps (requirements + pipecat extras + pytest)..."
+  (cd "$REPO_ROOT/dograh" && .venv/bin/pip install -q -r api/requirements.txt \
+    "google-genai>=1.68.0,<3" "google-cloud-speech>=2.33.0,<3" \
+    "google-cloud-texttospeech>=2.31.0,<3" "deepgram-sdk" "groq>=0.23.0,<2" \
+    "sarvamai==0.1.28" "speechmatics-voice[smart]~=0.2.8" "soundfile~=0.13.1" \
+    "aiortc>=1.14.0,<2" "opencv-python-headless>=4.11.0.86,<5" \
+    "azure-cognitiveservices-speech" pytest pytest-asyncio python-dotenv pyyaml-include \
+    ) || { echo "DOGRAH_DEPS_FAILED"; exit 2; }
+fi
+log "dograh venv deps present"
+
 # ------------------------------------------------------------------ 4. env files (never overwrite real secrets)
 for pair in "vaani-ai/.env:.env.example" "dograh/api/.env.test:.env.test.example"; do
   dst="$REPO_ROOT/${pair%%:*}"; src="$REPO_ROOT/${pair%%:*}/$(dirname "$dst")/${pair##*:}"
