@@ -1,7 +1,9 @@
+name: vaani-ai-dev
+
 services:
   db:
     image: postgres:16
-    container_name: vaani-db
+    container_name: vaani-db-dev
     restart: unless-stopped
     environment:
       POSTGRES_USER: vaani
@@ -19,7 +21,7 @@ services:
 
   redis:
     image: redis:7
-    container_name: vaani-redis
+    container_name: vaani-redis-dev
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -31,7 +33,7 @@ services:
 
   minio:
     image: minio/minio:latest
-    container_name: vaani-minio
+    container_name: vaani-minio-dev
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:

@@ -14,7 +14,7 @@ fail() { echo "CLEAN_FAILED:$1"; exit 2; }
 for port in 3000 3001 8000 9229; do
   if (command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | grep -q ":$port ") \
      || (command -v lsof >/dev/null 2>&1 && lsof -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1); then
-    fail "port_$port_in_use"
+    fail "port_${port}_in_use"
   fi
 done
 log "test ports free"
@@ -35,7 +35,7 @@ mkdir -p "$REPO_ROOT/qa/state"
 log "qa/state reset"
 
 # 4. dograh test db must exist (created by setup-env.sh)
-docker exec vaani-db psql -U vaani -d postgres -tc "SELECT 1 FROM pg_database WHERE datname='test_db'" 2>/dev/null | grep -q 1 \
+docker exec vaani-db-dev psql -U vaani -d postgres -tc "SELECT 1 FROM pg_database WHERE datname='test_db'" 2>/dev/null | grep -q 1 \
   || fail "test_db_missing"
 log "test_db present"
 

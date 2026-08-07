@@ -64,5 +64,8 @@ docs/superpowers/
 *.local
 plan/*.draft.md
 
+# --- QA runtime state (test output, verdict JSON) ---
+/qa/state/
+
 # Backups of original nested .git dirs (not part of the repo)
 .git_backups/

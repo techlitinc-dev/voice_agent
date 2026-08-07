@@ -51,16 +51,25 @@ log "vaani-ai infra up"
 
 # ------------------------------------------------------------------ 6. dograh infra (postgres/redis/minio on same host)
 # Dograh tests need a test_db on the same postgres. Postgres 16 from vaani compose
-# is fine; create test_db if missing.
-docker exec vaani-db psql -U vaani -d vaani -tc "SELECT 1 FROM pg_database WHERE datname='test_db'" | grep -q 1 \
-  || docker exec vaani-db psql -U vaani -d postgres -c "CREATE DATABASE test_db" \
+# is fine; create test_db if missing. Dev compose uses container_name vaani-db-dev.
+DEV_DB=vaani-db-dev
+DEV_REDIS=vaani-redis-dev
+
+for i in $(seq 1 30); do
+  docker exec "$DEV_DB" pg_isready -U vaani -d vaani >/dev/null 2>&1 && break
+  sleep 2
+  [[ $i -eq 30 ]] && { echo "DB_START_TIMEOUT"; exit 2; }
+done
+
+docker exec "$DEV_DB" psql -U vaani -d vaani -tc "SELECT 1 FROM pg_database WHERE datname='test_db'" | grep -q 1 \
+  || docker exec "$DEV_DB" psql -U vaani -d postgres -c "CREATE DATABASE test_db" \
   || { echo "TEST_DB_CREATE_FAILED"; exit 2; }
-log "dograh test_db present on vaani-db postgres"
+log "dograh test_db present on vaani-db-dev postgres"
 
 # ------------------------------------------------------------------ 7. wait for health
 for i in $(seq 1 30); do
-  docker exec vaani-db pg_isready -U vaani -d vaani >/dev/null 2>&1 \
-    && docker exec vaani-redis redis-cli ping 2>/dev/null | grep -q PONG \
+  docker exec "$DEV_DB" pg_isready -U vaani -d vaani >/dev/null 2>&1 \
+    && docker exec "$DEV_REDIS" redis-cli ping 2>/dev/null | grep -q PONG \
     && curl -sf "http://localhost:9000/minio/health/live" >/dev/null 2>&1 \
     && break
   sleep 2

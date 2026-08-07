@@ -17,7 +17,8 @@ export function sh(cmd: string): string {
 
 /** psql helper against the dev db container. */
 export function psql(sql: string): string {
-  return sh(`echo ${JSON.stringify(sql)} | docker exec -i vaani-db psql -U vaani -d vaani -tA`);
+  const dbContainer = process.env.E2E_DB_CONTAINER ?? "vaani-db-dev";
+  return sh(`echo ${JSON.stringify(sql)} | docker exec -i ${dbContainer} psql -U vaani -d vaani -tA`);
 }
 
 /**

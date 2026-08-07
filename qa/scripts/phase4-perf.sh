@@ -82,11 +82,11 @@ else
 fi
 
 # 5. graceful degradation: stop Redis, health must become 503 "down"
-docker stop vaani-redis >/dev/null 2>&1
+docker stop vaani-redis-dev >/dev/null 2>&1
 sleep 2
 RC="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000/api/health")"
 STATUS="$(curl -s "http://127.0.0.1:3000/api/health" | jq -r '.status')"
-docker start vaani-redis >/dev/null 2>&1
+docker start vaani-redis-dev >/dev/null 2>&1
 sleep 3
 if [[ "$RC" == "503" && "$STATUS" == "down" ]]; then pass "perf-degradation" "health 503/down with Redis down"; else fail "perf-degradation" "expected 503/down got $RC/$STATUS"; fi
 
