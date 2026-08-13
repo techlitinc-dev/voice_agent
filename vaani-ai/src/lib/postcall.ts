@@ -7,6 +7,7 @@ import { emitWebhookEvent } from "./webhooks";
 import { billCall } from "./billing";
 import { enqueueCallbackDial } from "./dialJobs";
 import { parseHumanTransferConfig, decideTransfer } from "./fallbackPolicy";
+import { recomputeLeadScore } from "./crm/scoring";
 
 const CHEAP_MODEL = "deepseek/deepseek-chat";
 const MISSED_CALLBACK_DELAY_MIN = 15;
@@ -136,6 +137,157 @@ export async function createMissedCallCallback(call: {
   });
 }
 
+/** CRM automation (guide crm/01 §4.3): turn call outcomes into pipeline moves.
+ *  - HOT interest → auto-create an OPEN deal in the default pipeline (if none open).
+ *  - outcome "booked" → move the deal to the Won stage.
+ *  Never throws; failures are logged and skipped so post-call processing continues.
+ */
+
+/** Outcome → follow-up task rules (guide crm/03 §4.1). */
+const TASK_RULES: Record<string, { type: "CALL" | "EMAIL" | "DOCUMENT" | "FOLLOW_UP"; title: string; delayHours: number }> = {
+  "callback-requested": { type: "CALL", title: "Callback requested by customer", delayHours: 24 },
+  "send-quote": { type: "EMAIL", title: "Send quotation", delayHours: 4 },
+  "document-pending": { type: "DOCUMENT", title: "Collect pending documents", delayHours: 48 },
+  "payment-pending": { type: "FOLLOW_UP", title: "Follow up on payment", delayHours: 24 },
+};
+
+/** Auto-create a follow-up task from the call outcome (guide crm/03 §4.1). */
+export async function autoCreateTasks(input: {
+  workspaceId: string;
+  callId: string;
+  phone: string;
+  outcome?: string | null;
+}): Promise<void> {
+  const rule = input.outcome ? TASK_RULES[input.outcome] : undefined;
+  if (!rule) return;
+
+  const contact = await db.contact.findFirst({
+    where: { workspaceId: input.workspaceId, phone: input.phone },
+    select: { id: true },
+  });
+  if (!contact) return;
+
+  const deal = await db.deal.findFirst({
+    where: { workspaceId: input.workspaceId, contactId: contact.id, status: "OPEN" },
+    select: { id: true },
+    orderBy: { createdAt: "desc" },
+  });
+
+  // Dedupe: one open auto-task per (contact, outcome rule).
+  const existing = await db.task.findFirst({
+    where: {
+      workspaceId: input.workspaceId,
+      contactId: contact.id,
+      title: rule.title,
+      status: "PENDING",
+    },
+    select: { id: true },
+  });
+  if (existing) return;
+
+  await db.task.create({
+    data: {
+      workspaceId: input.workspaceId,
+      dealId: deal?.id ?? null,
+      contactId: contact.id,
+      type: rule.type,
+      title: rule.title,
+      description: `Auto-created from call ${input.callId} (outcome: ${input.outcome})`,
+      dueAt: new Date(Date.now() + rule.delayHours * 3600 * 1000),
+    },
+  });
+}
+
+export async function runCrmAutomation(input: {
+  workspaceId: string;
+  callId: string;
+  phone: string;
+  contactName?: string;
+  interestScore?: string | null;
+  outcome?: string | null;
+}): Promise<void> {
+  try {
+    const contact = await db.contact.findFirst({
+      where: { workspaceId: input.workspaceId, phone: input.phone },
+      select: { id: true, name: true },
+    });
+    if (!contact) return; // no contact row → nothing to hang a deal on
+
+    const pipeline = await db.pipeline.findFirst({
+      where: { workspaceId: input.workspaceId },
+      orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+    });
+    if (!pipeline) return; // no CRM configured for this workspace
+
+    const openDeal = await db.deal.findFirst({
+      where: { workspaceId: input.workspaceId, contactId: contact.id, status: "OPEN" },
+      orderBy: { createdAt: "desc" },
+    });
+
+    let dealId = openDeal?.id;
+    if (!dealId && input.interestScore === "HOT") {
+      const firstStage = await db.stage.findFirst({
+        where: { pipelineId: pipeline.id },
+        orderBy: { order: "asc" },
+      });
+      if (firstStage) {
+        const deal = await db.deal.create({
+          data: {
+            workspaceId: input.workspaceId,
+            pipelineId: pipeline.id,
+            stageId: firstStage.id,
+            contactId: contact.id,
+            title: `${contact.name ?? input.contactName ?? "Lead"} — ${input.phone}`,
+            source: `call:${input.callId}`,
+            createdFromCallId: input.callId,
+            attributes: { interestScore: input.interestScore },
+          },
+        });
+        dealId = deal.id;
+        await db.activity.create({
+          data: {
+            workspaceId: input.workspaceId,
+            dealId: deal.id,
+            contactId: contact.id,
+            type: "DEAL_CREATED",
+            title: `Deal created from ${input.interestScore} call`,
+            description: `Auto-created for ${contact.name ?? input.phone}`,
+            metadata: { callId: input.callId, reason: "HOT interest on completed call" },
+            callId: input.callId,
+          },
+        });
+      }
+    }
+
+    if (dealId && input.outcome === "booked") {
+      const deal = await db.deal.findUnique({ where: { id: dealId }, select: { stageId: true } });
+      const wonStage = deal ? await db.stage.findFirst({
+        where: { pipelineId: pipeline.id, isWonStage: true },
+        orderBy: { order: "asc" },
+      }) : null;
+      if (wonStage && deal && deal.stageId !== wonStage.id) {
+        await db.deal.update({
+          where: { id: dealId },
+          data: { stageId: wonStage.id, status: "WON", closedAt: new Date(), closedReason: "booked on call" },
+        });
+        await db.activity.create({
+          data: {
+            workspaceId: input.workspaceId,
+            dealId,
+            contactId: contact.id,
+            type: "DEAL_WON",
+            title: `Deal won: ${wonStage.name}`,
+            metadata: { callId: input.callId, outcome: "booked" },
+            callId: input.callId,
+          },
+        });
+      }
+    }
+  } catch (e) {
+    console.error(`[crm-automation] failed for call ${input.callId}`, e);
+  }
+}
+
 /** After-call automation for one ended call. Fire-and-forget from the webhook. */
 export async function processCompletedCall(callId: string, hints: PostCallHints = {}): Promise<void> {
   const call = await db.call.findUnique({
@@ -221,6 +373,33 @@ export async function processCompletedCall(callId: string, hints: PostCallHints 
     const upsert = buildContactUpsert(call.workspaceId, call.fromNumber, entities, existing?.attributes);
     await db.contact.upsert(upsert);
     await pushLeadToCrm({ workspaceId: call.workspaceId, phone: call.fromNumber, entities, callId: call.id });
+  }
+
+  // --- CRM automation (guide crm/01 §4.3): voice-call outcomes → pipeline -------
+  await runCrmAutomation({
+    workspaceId: call.workspaceId,
+    callId: call.id,
+    phone: call.fromNumber,
+    contactName: entities.name ? String(entities.name) : undefined,
+    interestScore: call.interestScore,
+    outcome,
+  });
+
+  // --- Smart task creation (guide crm/03 §4.1): outcome → follow-up task -------
+  await autoCreateTasks({
+    workspaceId: call.workspaceId,
+    callId: call.id,
+    phone: call.fromNumber,
+    outcome,
+  });
+
+  // --- Lead scoring (guide crm/04 §2.4): a call completes → recompute ----------
+  const scoredContact = await db.contact.findFirst({
+    where: { workspaceId: call.workspaceId, phone: call.fromNumber },
+    select: { id: true },
+  });
+  if (scoredContact) {
+    await recomputeLeadScore(call.workspaceId, scoredContact.id).catch((e) => console.error("[scoring] failed after call", e));
   }
 
   // --- Message taking + staff notification (spec §5) ---------------------------

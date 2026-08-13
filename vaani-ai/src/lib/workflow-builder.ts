@@ -82,7 +82,7 @@ export function buildToolPromptSection(tools: ToolNodeSpec[]): string {
       case "WHATSAPP":
         return "- SEND WHATSAPP: when the caller agrees to receive details/links on WhatsApp, use the send_whatsapp tool with the confirmed phone number.";
       case "CRM_WRITE":
-        return "- CRM UPDATE: before ending the call, use the crm_write tool to log the caller's name, phone, requirement and the call outcome.";
+        return "- CRM UPDATE: when the caller is a serious lead, use the crm_write tool with action create_deal (params: title, value_paise, contact_phone — the caller's E.164 phone) to open a deal in the pipeline, action update_deal_stage (deal_id + stage_name) when the conversation advances or closes, action add_note (deal_id + body) for important details, and action schedule_task (deal_id + type + due_at + title) for follow-ups. Confirm before creating.";
       case "PAYMENT_LINK":
         return "- PAYMENT COLLECTION: when the caller agrees to pay, read out the exact amount, use the payment_collection tool to create and send the payment link, and tell them you will confirm once paid.";
       case "CUSTOM_WEBHOOK":

@@ -78,7 +78,11 @@ export default async function ContactsPage({
             <tbody>
               {contacts.map((c) => (
                 <tr key={c.id} className="border-b last:border-0">
-                  <td className="p-2 font-mono">{c.phone}</td>
+                  <td className="p-2 font-mono">
+                    <a href={`/contacts/${encodeURIComponent(c.phone)}`} className="hover:text-primary" data-testid="contact-link">
+                      {c.phone}
+                    </a>
+                  </td>
                   <td className="p-2">{c.name ?? "—"}</td>
                   <td className="p-2">{c.timezone ?? "—"}</td>
                   <td className="p-2" data-testid="consent-cell">

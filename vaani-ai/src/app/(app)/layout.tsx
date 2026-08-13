@@ -11,7 +11,7 @@ import { OnboardingResume } from "@/components/onboarding-resume";
 import { OnboardingChecklistWidget } from "@/components/onboarding-checklist";
 import {
   LayoutDashboard, Bot, PhoneOutgoing, Users, PhoneCall, Radio, ArrowRightLeft, PhoneForwarded,
-  Phone, BarChart3, Wallet, Settings, Store, BookOpen, Sparkles,
+  Phone, BarChart3, Wallet, Settings, Store, BookOpen, Sparkles, KanbanSquare,
 } from "lucide-react";
 
 const NAV = [
@@ -21,6 +21,7 @@ const NAV = [
   { href: "/knowledge", label: "Knowledge", icon: BookOpen },
   { href: "/campaigns", label: "Campaigns", icon: PhoneOutgoing },
   { href: "/contacts", label: "Contacts", icon: Users },
+  { href: "/crm", label: "CRM", icon: KanbanSquare },
   { href: "/calls", label: "Calls", icon: PhoneCall },
   { href: "/live", label: "Live", icon: Radio },
   { href: "/transfers", label: "Transfers", icon: ArrowRightLeft },

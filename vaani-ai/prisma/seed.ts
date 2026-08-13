@@ -681,6 +681,9 @@ clinic manager call back. End every call by summarizing what was agreed.`,
 
   } // end demo-content else (idempotent seed guard)
 
+  // --- CRM (guide crm/01) — idempotent, runs on every seed (upserts) ----------
+  await seedCrm(db, workspace.id, user.id);
+
   console.log("Seed complete:");
   console.log("  login:     demo@vaani.ai / demo1234");
   console.log("  workspace: Demo Dental Clinic (demo-clinic)");
@@ -689,7 +692,144 @@ clinic manager call back. End every call by summarizing what was agreed.`,
   console.log("             contacts+DNC, campaign, 2 calls (1 completed+QA, 1 live+transfer),");
   console.log("             voicemail, callback, WhatsApp, calendar/CRM, webhook+delivery,");
   console.log("             report+digest, payment order, invoice, reseller+child, trial/KYC,");
-  console.log("             retention, GDPR, onboarding");
+  console.log("             retention, GDPR, onboarding, CRM pipeline+deal+activity+task+segment");
+}
+
+/** CRM seed (guide crm/01 §3.2): default Sales pipeline + stages, a demo deal
+ *  tied to the demo call/contact when they exist, plus a demo segment. All
+ *  idempotent (upserts), so re-running the seed never collides. */
+async function seedCrm(prisma: PrismaClient, workspaceId: string, userId: string) {
+  const pipeline = await prisma.pipeline.upsert({
+    where: { workspaceId_name: { workspaceId, name: "Sales" } },
+    update: {},
+    create: {
+      workspaceId,
+      name: "Sales",
+      isDefault: true,
+      stages: {
+        create: [
+          { workspaceId, name: "New",          order: 0, probability: 10,  color: "#6b7280" },
+          { workspaceId, name: "Contacted",    order: 1, probability: 25,  color: "#3b82f6" },
+          { workspaceId, name: "Qualified",    order: 2, probability: 50,  color: "#8b5cf6" },
+          { workspaceId, name: "Negotiation",  order: 3, probability: 75,  color: "#f59e0b" },
+          { workspaceId, name: "Won",          order: 4, probability: 100, isWonStage: true,  color: "#10b981" },
+          { workspaceId, name: "Lost",         order: 5, probability: 0,   isLostStage: true, color: "#ef4444" },
+        ],
+      },
+    },
+  });
+  console.log("Seeded default pipeline:", pipeline.name);
+
+  const newStage = await prisma.stage.findFirst({
+    where: { pipelineId: pipeline.id, name: "New" },
+  });
+
+  // Demo deal is optional: it only exists when the demo content (call + contact)
+  // was seeded in this run or a previous one.
+  const demoCall = await prisma.call.findFirst({
+    where: { workspaceId, fromNumber: "+919812345678", status: "COMPLETED" },
+    orderBy: { createdAt: "desc" },
+  });
+  const demoContact = await prisma.contact.upsert({
+    where: { workspaceId_phone: { workspaceId, phone: "+919812345678" } },
+    update: {},
+    create: {
+      workspaceId,
+      phone: "+919812345678",
+      name: "Ramesh",
+      attributes: { city: "Bengaluru", service: "teeth cleaning" },
+      timezone: "Asia/Kolkata",
+      consentAt: new Date(),
+      consentSource: "verbal",
+    },
+  });
+
+  if (newStage && demoCall) {
+    const deal = await prisma.deal.upsert({
+      where: { id: "demo-deal-teeth-cleaning" },
+      update: {},
+      create: {
+        id: "demo-deal-teeth-cleaning",
+        workspaceId,
+        pipelineId: pipeline.id,
+        stageId: newStage.id,
+        contactId: demoContact.id,
+        title: "Teeth cleaning — Ramesh (₹1,500)",
+        valuePaise: 150000, // ₹1,500
+        source: `call:${demoCall.id}`,
+        createdFromCallId: demoCall.id,
+        attributes: { service: "teeth cleaning", slot: "Saturday 11am" },
+        ownerUserId: userId,
+      },
+    });
+
+    await prisma.activity.upsert({
+      where: { id: "demo-activity-deal-created" },
+      update: {},
+      create: {
+        id: "demo-activity-deal-created",
+        workspaceId,
+        dealId: deal.id,
+        contactId: demoContact.id,
+        type: "DEAL_CREATED",
+        title: "Deal created: Teeth cleaning — Ramesh (₹1,500)",
+        metadata: { callId: demoCall.id, outcome: "booked" },
+        callId: demoCall.id,
+      },
+    });
+
+    await prisma.activity.upsert({
+      where: { id: "demo-activity-call-inbound" },
+      update: {},
+      create: {
+        id: "demo-activity-call-inbound",
+        workspaceId,
+        dealId: deal.id,
+        contactId: demoContact.id,
+        type: "CALL_INBOUND",
+        title: `Call inbound (${demoCall.durationSec}s)`,
+        description: demoCall.summary,
+        metadata: { callId: demoCall.id, durationSec: demoCall.durationSec, outcome: demoCall.outcome },
+        callId: demoCall.id,
+        createdAt: demoCall.startedAt,
+      },
+    });
+
+    await prisma.task.upsert({
+      where: { id: "demo-task-confirm-slot" },
+      update: {},
+      create: {
+        id: "demo-task-confirm-slot",
+        workspaceId,
+        dealId: deal.id,
+        contactId: demoContact.id,
+        assigneeId: userId,
+        type: "CALL",
+        title: "Confirm Saturday 11am slot with Ramesh",
+        description: "Call the day before to reconfirm the teeth-cleaning appointment.",
+        dueAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+        reminderMin: 120,
+        status: "PENDING",
+      },
+    });
+  }
+
+  await prisma.segment.upsert({
+    where: { id: "demo-segment-hot-pune" },
+    update: {},
+    create: {
+      id: "demo-segment-hot-pune",
+      workspaceId,
+      name: "Hot leads — Bengaluru",
+      description: "Callers with HOT interest on their last call, in Bengaluru.",
+      rules: [
+        { field: "call.interestScore", op: "eq", value: "HOT" },
+        { field: "contact.attributes.city", op: "eq", value: "Bengaluru" },
+      ],
+      matchMode: "all",
+      isDynamic: true,
+    },
+  });
 }
 
 main()

@@ -26,6 +26,10 @@ export const TOOL_CONFIG_SCHEMAS: Record<AgentToolType, z.ZodTypeAny> = {
     provider: z.enum(["HUBSPOT", "ZOHO", "SALESFORCE", "LEADSQUARED", "FRESHSALES", "PIPEDRIVE"]).optional(),
     objectType: z.enum(["contact", "lead"]).default("contact"),
     logCallOutcome: z.coerce.boolean().default(true),
+    // Native CRM actions (guide crm/01): which actions the agent may use mid-call.
+    actions: z
+      .array(z.enum(["create_deal", "update_deal_stage", "add_note", "schedule_task"]))
+      .default(["create_deal", "update_deal_stage", "add_note", "schedule_task"]),
   }),
   PAYMENT_LINK: z.object({
     amountPaise: z.coerce.number().int().min(100).optional(), // fixed-amount agents (EMI)
@@ -61,7 +65,7 @@ export const TOOL_META: { tool: AgentToolType; label: string; description: strin
   { tool: "HUMAN_TRANSFER", label: "Transfer to human", description: "Warm transfer with context whisper (guide 06 queue)", testable: false },
   { tool: "SMS", label: "Send SMS", description: "Confirmation / details via Vobiz SMS", testable: true },
   { tool: "WHATSAPP", label: "Send WhatsApp", description: "Template message via Vobiz WhatsApp Business API", testable: true },
-  { tool: "CRM_WRITE", label: "CRM write", description: "Create/update lead, log call outcome in connected CRM", testable: true },
+  { tool: "CRM_WRITE", label: "CRM write", description: "Create/update deals, add notes, schedule tasks; or push lead to connected CRM", testable: true },
   { tool: "PAYMENT_LINK", label: "Payment collection", description: "Razorpay payment link: read out, send, confirm", testable: true },
   { tool: "CUSTOM_WEBHOOK", label: "Custom webhook", description: "Any REST endpoint with auth + response mapping", testable: true },
   { tool: "VOICEMAIL", label: "Take a message", description: "Voicemail capture with transcription + notify", testable: false },

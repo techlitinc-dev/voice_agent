@@ -104,6 +104,13 @@ model Workspace {
   apiKeys              ApiKey[]
   invites              WorkspaceInvite[]
   ssoIdentities        SsoIdentity[]
+  pipelines            Pipeline[]
+  stages               Stage[]
+  deals                Deal[]
+  activities           Activity[]
+  tasks                Task[]
+  segments             Segment[]
+  leadScores           LeadScore[]
 }
 
 model User {
@@ -123,6 +130,10 @@ model User {
   invitesSent           WorkspaceInvite[]
   transfersAccepted     TransferRequest[]
   callbackTasksAssigned CallbackTask[]
+  ownedDeals            Deal[]    @relation("DealOwner")
+  assignedTasks         Task[]    @relation("TaskAssignee")
+  dealNotes             DealNote[]
+  activities            Activity[]
 }
 
 model Membership {
@@ -522,6 +533,10 @@ model Contact {
   list             ContactList?      @relation(fields: [listId], references: [id], onDelete: SetNull)
   campaignContacts CampaignContact[]
   callbackTasks    CallbackTask[]
+  deals            Deal[]
+  activities       Activity[]
+  tasks            Task[]
+  leadScore        LeadScore?
 
   @@unique([workspaceId, phone])
   @@index([workspaceId])
@@ -627,6 +642,223 @@ model CallbackTask {
   assignedTo User?     @relation(fields: [assignedToUserId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, status, dueAt])
+}
+
+// ---------- CRM: Pipeline, Stages, Deals ----------
+
+model Pipeline {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String   // e.g. "Sales", "Support", "Recruitment"
+  isDefault   Boolean  @default(false) // one default pipeline per workspace
+  stages      Stage[]
+  deals       Deal[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+model Stage {
+  id          String   @id @default(cuid())
+  pipelineId  String
+  workspaceId String
+  name        String   // e.g. "New", "Contacted", "Qualified", "Won", "Lost"
+  order       Int      // display order: 0, 1, 2...
+  probability Int      @default(0) // win probability % — used for forecast value
+  isWonStage  Boolean  @default(false)
+  isLostStage Boolean  @default(false)
+  color       String?  // hex for UI badge
+  deals       Deal[]
+  createdAt   DateTime @default(now())
+
+  pipeline  Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([pipelineId, order])
+  @@index([workspaceId])
+}
+
+enum DealStatus {
+  OPEN
+  WON
+  LOST
+}
+
+model Deal {
+  id                String     @id @default(cuid())
+  workspaceId       String
+  pipelineId        String
+  stageId           String
+  contactId         String?
+  title             String     // e.g. "Home loan — Ramesh (₹25L)"
+  valuePaise        Int        @default(0) // deal value
+  currency          String     @default("INR")
+  status            DealStatus @default(OPEN)
+  priority          String     @default("medium") // low | medium | high | urgent
+  expectedClose     DateTime?  // forecast date
+  closedAt          DateTime?
+  closedReason      String?    // why won/lost
+  source            String?    // "campaign:clxxx", "inbound", "manual", "api"
+  attributes        Json?      // custom fields: {"loan_amount":2500000, "city":"Pune"}
+  ownerUserId       String?    // assigned sales rep
+  createdFromCallId String?    // the call that created this deal
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  workspace       Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  pipeline        Pipeline   @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  stage           Stage      @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  contact         Contact?   @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  activities      Activity[]
+  notes           DealNote[]
+  tasks           Task[]
+  calls           Call[]     @relation("DealCalls")
+  owner           User?      @relation("DealOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  createdFromCall Call?      @relation("DealSourceCall", fields: [createdFromCallId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, stageId])
+  @@index([workspaceId, ownerUserId])
+  @@index([workspaceId, expectedClose])
+}
+
+model DealNote {
+  id        String   @id @default(cuid())
+  dealId    String
+  userId    String?
+  body      String
+  createdAt DateTime @default(now())
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([dealId, createdAt])
+}
+
+enum ActivityType {
+  CALL_OUTBOUND
+  CALL_INBOUND
+  SMS_SENT
+  WHATSAPP_SENT
+  EMAIL_SENT
+  NOTE_ADDED
+  STAGE_CHANGED
+  DEAL_CREATED
+  DEAL_WON
+  DEAL_LOST
+  MEETING_SCHEDULED
+  TASK_COMPLETED
+  CONTACT_UPDATED
+  MANUAL
+}
+
+model Activity {
+  id          String       @id @default(cuid())
+  workspaceId String
+  dealId      String?
+  contactId   String?
+  type        ActivityType
+  title       String       // human-readable: "Call completed (4m 12s)"
+  description String?
+  metadata    Json?        // type-specific: { callId, durationSec, outcome }
+  userId      String?      // who did it (null = system/AI)
+  callId      String?      // link to the call that generated this activity
+  createdAt   DateTime     @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  deal      Deal?     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  contact   Contact?  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  call      Call?     @relation("CallActivity", fields: [callId], references: [id], onDelete: SetNull)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([dealId, createdAt])
+  @@index([contactId, createdAt])
+}
+
+enum TaskType {
+  CALL
+  SMS
+  WHATSAPP
+  EMAIL
+  MEETING
+  DOCUMENT
+  FOLLOW_UP
+  CUSTOM
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+model Task {
+  id          String     @id @default(cuid())
+  workspaceId String
+  dealId      String?
+  contactId   String?
+  assigneeId  String?
+  type        TaskType   @default(FOLLOW_UP)
+  title       String
+  description String?
+  dueAt       DateTime
+  reminderMin Int        @default(30) // remind assignee N min before dueAt
+  status      TaskStatus @default(PENDING)
+  completedAt DateTime?
+  remindedAt  DateTime? // set by the reminder cron so each task is notified once
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  deal      Deal?     @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  contact   Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  assignee  User?     @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status, dueAt])
+  @@index([assigneeId, status])
+  @@index([dealId])
+}
+
+model Segment {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String   // "Hot leads Pune", "EMI overdue > 30 days"
+  description String?
+  // Rule engine: array of conditions evaluated against Contact + Call stats
+  // e.g. [{"field":"call.interestScore","op":"eq","value":"HOT"},{"field":"contact.attributes.city","op":"eq","value":"Pune"}]
+  rules       Json
+  matchMode   String   @default("all") // "all" (AND) or "any" (OR)
+  isDynamic   Boolean  @default(true) // re-evaluated on each contact change
+  memberCount Int      @default(0) // cached count, refreshed by worker
+  lastEvalAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+model LeadScore {
+  id          String   @id @default(cuid())
+  workspaceId String
+  contactId   String   @unique // one score per contact
+  score       Int      @default(0) // 0–100
+  grade       String   @default("C") // A (80–100), B (60–79), C (40–59), D (0–39)
+  reasons     String[] @default([]) // ["HOT interest on last call", "Opened 3 emails"]
+  factors     Json?    // breakdown: { "engagement": 30, "intent": 25, "recency": 15 }
+  computedAt  DateTime @default(now()) @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact   Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, grade])
 }
 
 model WhatsAppTemplate {
@@ -767,6 +999,11 @@ model Call {
   transferRequests  TransferRequest[]
   voicemailMessages VoicemailMessage[]
   callbackTasks     CallbackTask[]
+  dealId            String?
+  deal              Deal?     @relation("DealCalls", fields: [dealId], references: [id], onDelete: SetNull)
+  dealsCreated      Deal[]    @relation("DealSourceCall") // deals created by this call
+  activityId        String? // link to the activity created for this call
+  activities        Activity[] @relation("CallActivity")
 
   @@index([workspaceId, createdAt])
   @@index([workspaceId, campaignId])

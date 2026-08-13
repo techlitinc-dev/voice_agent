@@ -13,6 +13,9 @@ describe("permission vocabulary", () => {
       "agents:read", "agents:write",
       "campaigns:read", "campaigns:write", "campaigns:launch",
       "contacts:read", "contacts:write", "contacts:import",
+      "deals:read", "deals:write", "deals:delete",
+      "pipelines:write",
+      "segments:read", "segments:write", "segments:delete",
       "calls:read", "recordings:read", "analytics:read",
       "billing:read", "billing:write",
       "users:read", "users:write",
@@ -60,8 +63,8 @@ describe("role defaults (spec 3.2)", () => {
     expect(ROLE_PERMISSIONS.AGENT).not.toContain("campaigns:write");
   });
 
-  it("VIEWER gets dashboards/reports only", () => {
-    expect(ROLE_PERMISSIONS.VIEWER).toEqual(["analytics:read"]);
+  it("VIEWER gets dashboards/reports + CRM read-only (guide crm/02 §8)", () => {
+    expect(ROLE_PERMISSIONS.VIEWER).toEqual(["analytics:read", "deals:read", "segments:read"]);
   });
 });
 
@@ -96,7 +99,8 @@ describe("grant/revoke overrides", () => {
       revokedPermissions: ["also-garbage"],
     });
     expect(resolved.has("calls:read")).toBe(true);
-    expect(resolved.size).toBe(2);
+    // VIEWER baseline = analytics:read, deals:read, segments:read + granted calls:read
+    expect(resolved.size).toBe(4);
   });
 
   it("hasPermission composes role + overrides", () => {
