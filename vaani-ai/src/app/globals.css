@@ -2,25 +2,61 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: 222 47% 5%;
-  --foreground: 210 40% 96%;
-  --card: 222 47% 8%;
-  --card-foreground: 210 40% 96%;
-  --primary: 174 72% 46%;
-  --primary-foreground: 222 47% 6%;
-  --muted: 217 33% 15%;
-  --muted-foreground: 215 20% 60%;
-  --border: 217 33% 16%;
-  --ring: 174 72% 46%;
+@layer base {
+  :root {
+    --background: 222 47% 5%;
+    --foreground: 210 40% 96%;
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 96%;
+    --popover: 222 47% 8%;
+    --popover-foreground: 210 40% 96%;
+    --primary: 174 72% 46%;
+    --primary-foreground: 222 47% 6%;
+    --secondary: 217 33% 15%;
+    --secondary-foreground: 210 40% 96%;
+    --muted: 217 33% 15%;
+    --muted-foreground: 215 20% 60%;
+    --accent: 217 33% 15%;
+    --accent-foreground: 210 40% 96%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 96%;
+    --border: 217 33% 16%;
+    --input: 217 33% 16%;
+    --ring: 174 72% 46%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222 47% 5%;
+    --foreground: 210 40% 96%;
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 96%;
+    --popover: 222 47% 8%;
+    --popover-foreground: 210 40% 96%;
+    --primary: 174 72% 46%;
+    --primary-foreground: 222 47% 6%;
+    --secondary: 217 33% 15%;
+    --secondary-foreground: 210 40% 96%;
+    --muted: 217 33% 15%;
+    --muted-foreground: 215 20% 60%;
+    --accent: 217 33% 15%;
+    --accent-foreground: 210 40% 96%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 96%;
+    --border: 217 33% 16%;
+    --input: 217 33% 16%;
+    --ring: 174 72% 46%;
+  }
 }
 
-* {
-  border-color: hsl(var(--border));
-}
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
 
-body {
-  background-color: hsl(var(--background));
-  color: hsl(var(--foreground));
-  font-feature-settings: "ss01", "cv11";
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-feature-settings: "ss01", "cv11";
+  }
 }
