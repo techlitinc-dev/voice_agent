@@ -1,8 +1,83 @@
 /**
- * Pure analytics aggregations (spec §8). No DB access — every function takes
- * fixture-friendly row types so Vitest can pin the math exactly.
- * Money is integer paise everywhere.
+ * Pure analytics aggregations (spec §8 + executive dashboard guide 01).
+ * No DB access — every function takes fixture-friendly row types so Vitest
+ * can pin the math exactly. Money is integer paise everywhere.
  */
+
+// ---------- Date ranges (executive dashboard guide 01 §6) ----------
+
+export type DateRange = { start: Date; end: Date };
+
+/** Start of the local day for a date. */
+export function startOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+/** End of the local day for a date (23:59:59.999). */
+export function endOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+}
+
+export function subDays(d: Date, n: number): Date {
+  return new Date(d.getTime() - n * 86400000);
+}
+
+export function startOfMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+export function endOfMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+}
+
+export function subMonths(d: Date, n: number): Date {
+  return new Date(d.getFullYear(), d.getMonth() - n, 1);
+}
+
+export function startOfQuarter(d: Date): Date {
+  return new Date(d.getFullYear(), Math.floor(d.getMonth() / 3) * 3, 1);
+}
+
+const PRESET_DEFAULTS: Record<string, DateRange> = {};
+
+export function registerDatePreset(preset: string, range: DateRange): void {
+  PRESET_DEFAULTS[preset] = range;
+}
+
+/** Resolve a dashboard range preset to { start, end }. Defaults to last 7 days. */
+export function getDateRange(preset: string): DateRange {
+  const now = new Date();
+  switch (preset) {
+    case "today": return { start: startOfDay(now), end: now };
+    case "yesterday": return { start: startOfDay(subDays(now, 1)), end: endOfDay(subDays(now, 1)) };
+    case "7d": return { start: subDays(now, 7), end: now };
+    case "30d": return { start: subDays(now, 30), end: now };
+    case "90d": return { start: subDays(now, 90), end: now };
+    case "month": return { start: startOfMonth(now), end: now };
+    case "lastmonth": return { start: startOfMonth(subMonths(now, 1)), end: endOfMonth(subMonths(now, 1)) };
+    case "quarter": return { start: startOfQuarter(now), end: now };
+    case "custom": return { start: subDays(now, 30), end: now };
+    default: return PRESET_DEFAULTS[preset] ?? { start: subDays(now, 7), end: now };
+  }
+}
+
+/** Same window length as the current range, immediately before it (for trends). */
+export function previousRange(range: DateRange): DateRange {
+  const span = range.end.getTime() - range.start.getTime();
+  return { start: new Date(range.start.getTime() - span), end: new Date(range.start.getTime() - 1) };
+}
+
+// ---------- Trend helper (executive dashboard guide 01 §2.3) ----------
+
+/** Integer % change between two periods; 100% when prev is 0 and curr > 0, 0% when both 0. */
+export function pctChange(curr: number, prev: number): number {
+  if (prev === 0) return curr > 0 ? 100 : 0;
+  return Math.round(((curr - prev) / prev) * 100);
+}
 
 export type AnalyticsCallRow = {
   createdAt: Date;
@@ -26,14 +101,14 @@ export function isAnswered(c: Pick<AnalyticsCallRow, "status" | "answeredAt">): 
 }
 
 /** ASR (answer seize ratio) as an integer percentage 0-100. */
-export function computeAsr(calls: AnalyticsCallRow[]): number {
+export function computeAsr(calls: Pick<AnalyticsCallRow, "status" | "answeredAt">[]): number {
   if (calls.length === 0) return 0;
   const answered = calls.filter(isAnswered).length;
   return Math.round((answered / calls.length) * 100);
 }
 
 /** AHT (average handle time) in whole seconds, over ALL calls in the set. */
-export function computeAht(calls: AnalyticsCallRow[]): number {
+export function computeAht(calls: Pick<AnalyticsCallRow, "durationSec">[]): number {
   if (calls.length === 0) return 0;
   return Math.round(calls.reduce((a, c) => a + c.durationSec, 0) / calls.length);
 }
@@ -44,11 +119,12 @@ export function wholesaleCostPaise(c: Pick<AnalyticsCallRow,
   return c.costTelephonyPaise + c.costSttPaise + c.costLlmPaise + c.costTtsPaise;
 }
 
-export function sumWholesalePaise(calls: AnalyticsCallRow[]): number {
+export function sumWholesalePaise(calls: Pick<AnalyticsCallRow,
+  "costTelephonyPaise" | "costSttPaise" | "costLlmPaise" | "costTtsPaise">[]): number {
   return calls.reduce((a, c) => a + wholesaleCostPaise(c), 0);
 }
 
-export function sumBilledPaise(calls: AnalyticsCallRow[]): number {
+export function sumBilledPaise(calls: Pick<AnalyticsCallRow, "billedPaise">[]): number {
   return calls.reduce((a, c) => a + c.billedPaise, 0);
 }
 
@@ -195,3 +271,154 @@ export function agentPerformance(
   }
   return rows.sort((a, b) => b.calls - a.calls);
 }
+
+// ---------- Call-to-deal funnel (guide 02 §1) ----------
+
+export type FunnelStage = {
+  stage: string;
+  count: number;
+  conversion: number | null; // integer % vs the previous stage
+  valuePaise?: number;
+  avgTime?: string;
+};
+
+/** Conversion from prev -> curr as integer % (100% when prev is 0 but curr > 0). */
+export function funnelConversion(curr: number, prev: number): number {
+  if (prev <= 0) return curr > 0 ? 100 : 0;
+  return Math.round((curr / prev) * 100);
+}
+
+/** Drop-off % from prev -> curr (0 when prev is 0). */
+export function funnelDropoff(prev: number, curr: number): number {
+  if (prev <= 0) return 0;
+  return Math.round(((prev - curr) / prev) * 100);
+}
+
+/** Stage index with the largest absolute drop-off (0 when flat/empty). */
+export function biggestDropoff(stages: FunnelStage[]): number {
+  let max = 0;
+  let idx = 0;
+  for (let i = 0; i + 1 < stages.length; i++) {
+    const drop = stages[i].count - stages[i + 1].count;
+    if (drop > max) {
+      max = drop;
+      idx = i;
+    }
+  }
+  return idx;
+}
+
+// ---------- Cohort retention (guide 02 §3) ----------
+
+export type CohortRow = {
+  cohortMonth: string; // YYYY-MM
+  cohortSize: number;
+  week0: number;
+  week1: number;
+  week2: number;
+  week4: number;
+  week8: number;
+};
+
+export const COHORT_WEEKS = ["week0", "week1", "week2", "week4", "week8"] as const;
+
+/**
+ * Bucket an elapsed (ms) into week-0/1/2/4/8 retention buckets, matching the
+ * retention matrix semantics: week1 = 7-13d, week2 = 14-27d, week4 = 28-55d,
+ * week8 = 56d+.
+ */
+export function retentionBucket(elapsedMs: number): (typeof COHORT_WEEKS)[number] | null {
+  const days = elapsedMs / 86400000;
+  if (days < 7) return "week0";
+  if (days < 14) return "week1";
+  if (days < 28) return "week2";
+  if (days < 56) return "week4";
+  return "week8";
+}
+
+// ---------- Time to conversion (guide 02 §4) ----------
+
+export type TimeToConversion = {
+  buckets: Record<"0-3" | "4-7" | "8-14" | "15-30" | "30+", number>;
+  median: number | null; // days
+  average: number | null; // days
+};
+
+export type TimeToConversionBucket = "0-3" | "4-7" | "8-14" | "15-30" | "30+";
+
+export function timeToConversionBucket(days: number): TimeToConversionBucket {
+  if (days <= 3) return "0-3";
+  if (days <= 7) return "4-7";
+  if (days <= 14) return "8-14";
+  if (days <= 30) return "15-30";
+  return "30+";
+}
+
+/** Days-to-close distribution + median/average from per-deal day counts. */
+export function computeTimeToConversion(daysToClose: number[]): TimeToConversion {
+  const buckets: TimeToConversion["buckets"] = { "0-3": 0, "4-7": 0, "8-14": 0, "15-30": 0, "30+": 0 };
+  for (const days of daysToClose) buckets[timeToConversionBucket(days)] += 1;
+  const sorted = [...daysToClose].sort((a, b) => a - b);
+  const n = sorted.length;
+  const median = n === 0
+    ? null
+    : n % 2 === 1
+      ? sorted[(n - 1) / 2]
+      : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
+  const average = n === 0 ? null : sorted.reduce((a, b) => a + b, 0) / n;
+  return { buckets, median, average };
+}
+
+// ---------- Cost & revenue attribution (guide 03) ----------
+
+/** ROI multiple (e.g. 1.57×) from revenue/cost; 0 when cost is 0. */
+export function roiMultiple(revenuePaise: number, costPaise: number): number {
+  if (costPaise <= 0) return 0;
+  return Math.round((revenuePaise / costPaise) * 100) / 100;
+}
+
+/** Cost/min in paise from total cost + duration; 0 when no audio time. */
+export function costPerMinutePaise(costPaise: number, durationSec: number): number {
+  const minutes = durationSec / 60;
+  if (minutes <= 0) return 0;
+  return Math.round(costPaise / minutes);
+}
+
+/** Avg cost/call in paise; 0 when no calls. */
+export function avgCostPerCallPaise(costPaise: number, calls: number): number {
+  if (calls <= 0) return 0;
+  return Math.round(costPaise / calls);
+}
+
+// ---------- Revenue recognition (guide 03 §4.1) ----------
+
+export type RevenueRecognition = {
+  recognizedPaise: number; // SUM(billedPaise) on COMPLETED calls
+  pendingCalls: number; // active (RINGING/IN_PROGRESS) calls not yet billed
+  pendingEstimatePaise: number; // active calls × avg cost/call
+  deferredPaise: number; // wallet balance not yet consumed
+};
+
+export function computeRevenueRecognition(input: {
+  completedBilledPaise: number;
+  activeCalls: number;
+  avgCostPaisePerCall: number;
+  walletBalancePaise: number;
+}): RevenueRecognition {
+  return {
+    recognizedPaise: input.completedBilledPaise,
+    pendingCalls: input.activeCalls,
+    pendingEstimatePaise: Math.round(input.activeCalls * input.avgCostPaisePerCall),
+    deferredPaise: input.walletBalancePaise,
+  };
+}
+
+// ---------- MRR/ARR (guide 03 §4.2) ----------
+
+export type Mrr = { planMrrPaise: number; usageMrrPaise: number; totalMrrPaise: number };
+
+export function computeMrr(planPaise: number, usagePaise: number): Mrr {
+  return { planMrrPaise: planPaise, usageMrrPaise: usagePaise, totalMrrPaise: planPaise + usagePaise };
+}
+
+

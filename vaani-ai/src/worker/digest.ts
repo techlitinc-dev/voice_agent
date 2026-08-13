@@ -9,6 +9,9 @@ import {
   type DigestStats,
 } from "../lib/digest";
 import { computeAht, computeAsr, sumBilledPaise, sumWholesalePaise } from "../lib/analytics";
+import { executeReport } from "../lib/reports/executor";
+import { renderReportSummary } from "../lib/reports/export";
+import type { ReportConfig } from "../lib/reports/types";
 
 const db = new PrismaClient();
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
@@ -34,6 +37,20 @@ async function sendMail(to: string[], subject: string, text: string): Promise<bo
   return true;
 }
 
+/** Execute a report-scoped digest: run the saved report and email its summary. */
+async function sendReportDigest(digest: { id: string; workspaceId: string; reportId: string; recipients: string[]; frequency: DigestFrequency }, _workspaceName: string): Promise<boolean> {
+  const report = await db.savedReport.findFirst({ where: { id: digest.reportId, workspaceId: digest.workspaceId } });
+  if (!report) {
+    log(`[digest] report ${digest.reportId} not found for digest ${digest.id}`);
+    return false;
+  }
+  const result = await executeReport(digest.workspaceId, (report.config ?? {}) as unknown as ReportConfig);
+  const summary = renderReportSummary(result);
+  const subject = `Vaani Report: ${report.name} — ${new Date().toLocaleDateString("en-IN")}`;
+  await sendMail(digest.recipients, subject, summary);
+  return true;
+}
+
 export async function sendDueDigests(): Promise<number> {
   const now = new Date();
   const digests = await db.scheduledDigest.findMany({
@@ -46,6 +63,17 @@ export async function sendDueDigests(): Promise<number> {
     const freq = d.frequency as DigestFrequency;
     if (!isDigestDue(freq, d.lastSentAt, now) || d.recipients.length === 0) continue;
     try {
+      if (d.reportId) {
+        await sendReportDigest(
+          { id: d.id, workspaceId: d.workspaceId, reportId: d.reportId, recipients: d.recipients, frequency: freq },
+          d.workspace.name
+        );
+        await db.scheduledDigest.update({ where: { id: d.id }, data: { lastSentAt: now } });
+        sent += 1;
+        log(`[digest] sent report digest ${d.id} (report ${d.reportId}) to ${d.recipients.length} recipient(s)`);
+        continue;
+      }
+
       const since = new Date(now.getTime() - frequencyWindowMs(freq));
       const calls = await db.call.findMany({
         where: { workspaceId: d.workspaceId, createdAt: { gte: since } },

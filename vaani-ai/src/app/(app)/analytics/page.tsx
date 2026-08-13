@@ -66,6 +66,7 @@ export default async function AnalyticsPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold">Analytics — last 30 days</h1>
         <div className="flex gap-4 text-sm">
+          <Link href="/analytics/funnel" className="text-primary hover:underline" data-testid="nav-funnel-cohorts">Funnel & cohorts →</Link>
           <Link href="/analytics/campaigns" className="text-primary hover:underline" data-testid="nav-campaign-reports">Campaign reports →</Link>
           <Link href="/analytics/agents" className="text-primary hover:underline" data-testid="nav-agent-performance">Agent performance →</Link>
           <Link href="/analytics/cost" className="text-primary hover:underline" data-testid="nav-cost-analytics">Cost & margins →</Link>

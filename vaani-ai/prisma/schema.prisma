@@ -134,6 +134,7 @@ model User {
   assignedTasks         Task[]    @relation("TaskAssignee")
   dealNotes             DealNote[]
   activities            Activity[]
+  savedReportsCreated   SavedReport[] @relation("SavedReportCreator")
 }
 
 model Membership {
@@ -1213,14 +1214,17 @@ model QaScore {
 }
 
 model SavedReport {
-  id          String   @id @default(cuid())
-  workspaceId String
-  name        String
-  reportType  String // "calls" | "campaign" | "cost" | "agent-performance"
-  config      Json? // filters, date range, grouping, columns
-  createdAt   DateTime @default(now())
+  id              String           @id @default(cuid())
+  workspaceId     String
+  name            String
+  reportType      String // "calls" | "campaign" | "cost" | "agent-performance"
+  config          Json? // ReportConfig: filters, date range, grouping, metrics, chart
+  visibility      String           @default("shared") // "shared" | "private"
+  createdByUserId String?
+  createdAt       DateTime         @default(now())
 
   workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User?             @relation("SavedReportCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   digests   ScheduledDigest[]
 
   @@index([workspaceId])

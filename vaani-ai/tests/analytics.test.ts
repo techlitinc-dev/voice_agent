@@ -1,15 +1,30 @@
 import { describe, expect, it } from "vitest";
 import {
   agentPerformance,
+  avgCostPerCallPaise,
+  biggestDropoff,
   buildHeatmap,
   burnPaisePerMinute,
   computeAht,
   computeAsr,
   computeFunnel,
+  computeMrr,
+  computeRevenueRecognition,
+  computeTimeToConversion,
+  costPerMinutePaise,
+  funnelConversion,
+  funnelDropoff,
+  getDateRange,
   marginPercent,
   ourNumber,
+  pctChange,
   perNumberStats,
+  previousRange,
   ratePercent,
+  retentionBucket,
+  roiMultiple,
+  startOfDay,
+  subDays,
   sumBilledPaise,
   sumWholesalePaise,
   wholesaleCostPaise,
@@ -146,5 +161,157 @@ describe("agentPerformance", () => {
     expect(rows[0].avgQaPercent).toBe(95); // 38/40
     expect(rows[1].avgScriptAdherence).toBeNull();
     expect(rows[1].avgQaPercent).toBeNull();
+  });
+});
+
+// ---------- Executive dashboard helpers (guide 01 §2.3 + §6) ----------
+
+describe("pctChange", () => {
+  it("computes integer % change", () => {
+    expect(pctChange(120, 100)).toBe(20);
+    expect(pctChange(80, 100)).toBe(-20);
+  });
+  it("guards divide-by-zero: 100% when prev is 0 and curr > 0, else 0%", () => {
+    expect(pctChange(5, 0)).toBe(100);
+    expect(pctChange(0, 0)).toBe(0);
+  });
+});
+
+describe("getDateRange", () => {
+  it("'today' starts at local midnight", () => {
+    const range = getDateRange("today");
+    expect(range.start.getTime()).toBe(startOfDay(new Date()).getTime());
+    expect(range.end.getTime()).toBeLessThanOrEqual(Date.now());
+  });
+  it("'7d' spans exactly 7 days", () => {
+    const range = getDateRange("7d");
+    expect(range.start.getTime()).toBe(subDays(new Date(), 7).getTime());
+  });
+  it("defaults to last 7 days for unknown presets", () => {
+    const range = getDateRange("nope");
+    expect(range.start.getTime()).toBe(subDays(new Date(), 7).getTime());
+  });
+});
+
+describe("previousRange", () => {
+  it("builds an equal-length window before the current range", () => {
+    const current = { start: new Date("2024-07-08T00:00:00Z"), end: new Date("2024-07-15T00:00:00Z") };
+    const prev = previousRange(current);
+    expect(prev.start.toISOString()).toBe("2024-07-01T00:00:00.000Z");
+    expect(prev.end.toISOString()).toBe("2024-07-07T23:59:59.999Z");
+  });
+});
+
+// ---------- Funnel & cohort helpers (guide 02 §1, §3, §4) ----------
+
+describe("funnelConversion / funnelDropoff", () => {
+  it("computes integer % conversion between stages", () => {
+    expect(funnelConversion(450, 1000)).toBe(45);
+    expect(funnelConversion(0, 100)).toBe(0);
+  });
+  it("guards divide-by-zero", () => {
+    expect(funnelConversion(5, 0)).toBe(100);
+    expect(funnelConversion(0, 0)).toBe(0);
+  });
+  it("computes drop-off %", () => {
+    expect(funnelDropoff(1000, 450)).toBe(55);
+    expect(funnelDropoff(0, 0)).toBe(0);
+  });
+});
+
+describe("biggestDropoff", () => {
+  it("finds the stage with the largest absolute drop", () => {
+    const stages = [
+      { stage: "A", count: 1000, conversion: null },
+      { stage: "B", count: 450, conversion: 45 },
+      { stage: "C", count: 300, conversion: 67 },
+      { stage: "D", count: 120, conversion: 40 },
+      { stage: "E", count: 70, conversion: 58 },
+    ];
+    expect(biggestDropoff(stages)).toBe(0); // 1000-450 = 550 is the biggest absolute drop
+  });
+  it("handles flat and empty funnels", () => {
+    expect(biggestDropoff([{ stage: "A", count: 10, conversion: null }, { stage: "B", count: 10, conversion: 100 }])).toBe(0);
+    expect(biggestDropoff([])).toBe(0);
+  });
+});
+
+describe("retentionBucket", () => {
+  it("maps elapsed time to week-0/1/2/4/8 buckets", () => {
+    const day = 86400000;
+    expect(retentionBucket(0)).toBe("week0");
+    expect(retentionBucket(6.9 * day)).toBe("week0");
+    expect(retentionBucket(7 * day)).toBe("week1");
+    expect(retentionBucket(13 * day)).toBe("week1");
+    expect(retentionBucket(14 * day)).toBe("week2");
+    expect(retentionBucket(27 * day)).toBe("week2");
+    expect(retentionBucket(28 * day)).toBe("week4");
+    expect(retentionBucket(55 * day)).toBe("week4");
+    expect(retentionBucket(56 * day)).toBe("week8");
+    expect(retentionBucket(365 * day)).toBe("week8");
+  });
+});
+
+describe("computeTimeToConversion", () => {
+  it("buckets days-to-close and computes median + average", () => {
+    const days = [1, 2, 5, 6, 9, 20, 45]; // sorted: 1,2,5,6,9,20,45
+    const result = computeTimeToConversion(days);
+    expect(result.buckets).toEqual({ "0-3": 2, "4-7": 2, "8-14": 1, "15-30": 1, "30+": 1 });
+    expect(result.median).toBe(6);
+    expect(result.average).toBeCloseTo(12.571, 1);
+  });
+  it("handles empty input", () => {
+    const result = computeTimeToConversion([]);
+    expect(result.buckets).toEqual({ "0-3": 0, "4-7": 0, "8-14": 0, "15-30": 0, "30+": 0 });
+    expect(result.median).toBeNull();
+    expect(result.average).toBeNull();
+  });
+});
+
+// ---------- Cost & revenue attribution helpers (guide 03) ----------
+
+describe("roiMultiple", () => {
+  it("computes revenue/cost multiple", () => {
+    expect(roiMultiple(22000, 14000)).toBe(1.57);
+    expect(roiMultiple(8100, 6300)).toBe(1.29);
+  });
+  it("guards divide-by-zero", () => {
+    expect(roiMultiple(100, 0)).toBe(0);
+  });
+});
+
+describe("costPerMinutePaise / avgCostPerCallPaise", () => {
+  it("computes cost per minute from cost + duration", () => {
+    // 1000 paise over 5 min (300s) = 200 paise/min
+    expect(costPerMinutePaise(1000, 300)).toBe(200);
+    expect(costPerMinutePaise(1000, 0)).toBe(0);
+  });
+  it("computes avg cost per call", () => {
+    expect(avgCostPerCallPaise(1000, 4)).toBe(250);
+    expect(avgCostPerCallPaise(1000, 0)).toBe(0);
+  });
+});
+
+describe("computeRevenueRecognition", () => {
+  it("recognizes completed billing, estimates pending, defers wallet", () => {
+    const result = computeRevenueRecognition({
+      completedBilledPaise: 5000,
+      activeCalls: 3,
+      avgCostPaisePerCall: 200,
+      walletBalancePaise: 12000,
+    });
+    expect(result.recognizedPaise).toBe(5000);
+    expect(result.pendingCalls).toBe(3);
+    expect(result.pendingEstimatePaise).toBe(600);
+    expect(result.deferredPaise).toBe(12000);
+  });
+});
+
+describe("computeMrr", () => {
+  it("sums plan + usage MRR", () => {
+    const mrr = computeMrr(200000, 50000); // ₹2,000 + ₹500
+    expect(mrr.planMrrPaise).toBe(200000);
+    expect(mrr.usageMrrPaise).toBe(50000);
+    expect(mrr.totalMrrPaise).toBe(250000);
   });
 });
