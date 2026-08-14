@@ -7,12 +7,11 @@ import { CHECKLIST_KEYS, parseChecklist, progressPercent } from "@/lib/onboardin
 import { OnboardingResume } from "@/components/onboarding-resume";
 import { OnboardingChecklistWidget } from "@/components/onboarding-checklist";
 import { AppShell } from "./app-shell";
+import { DesktopCommandTrigger, MobileCommandTrigger } from "./command-trigger";
 import { MobileNav } from "@/components/nav/mobile-nav";
 import { SidebarLink } from "@/components/nav/sidebar-link";
 import { UserMenu } from "@/components/nav/user-menu";
-import { Kbd } from "@/components/ui/kbd";
 import { NAV_SECTIONS } from "@/components/nav/nav-config";
-import { Sparkles, Search } from "lucide-react";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   let ctx;
@@ -68,17 +67,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             )}
           </div>
           <nav className="flex-1 space-y-4 overflow-y-auto px-3 pb-4">
-            <button
-              type="button"
-              data-testid="desktop-command-trigger"
-              onClick={() => document.dispatchEvent(new Event("vaani:open-command"))}
-              className="flex w-full items-center gap-3 rounded-md border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <Search className="h-4 w-4 flex-shrink-0" />
-              <span className="flex-1 text-left">Search…</span>
-              <Kbd>⌘K</Kbd>
-            </button>
-            <SidebarLink item={{ label: "Setup", href: "/onboarding", icon: Sparkles }} />
+            <DesktopCommandTrigger />
+            <SidebarLink item={{ label: "Setup", href: "/onboarding", icon: "Sparkles" }} />
             {NAV_SECTIONS.map((s) => (
               <div key={s.section}>
                 <p className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -95,11 +85,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <div className="border-t p-4">
             <p className="text-xs text-muted-foreground">Wallet</p>
             <p className="font-semibold text-primary">{formatINR(wallet?.balancePaise ?? 0)}</p>
-            <UserMenu
-              name={ctx.user.fullName ?? ctx.user.email}
-              email={ctx.user.email}
-              onOpenCommandPalette={() => document.dispatchEvent(new Event("vaani:open-command"))}
-            />
+            <UserMenu name={ctx.user.fullName ?? ctx.user.email} email={ctx.user.email} />
           </div>
         </aside>
 
@@ -112,15 +98,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 <span>Vaani <span className="text-primary">AI</span></span>
               )}
             </span>
-            <button
-              type="button"
-              aria-label="Open command menu"
-              data-testid="mobile-command-trigger"
-              className="ml-auto flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
-              onClick={() => document.dispatchEvent(new Event("vaani:open-command"))}
-            >
-              <Search className="h-4 w-4" />
-            </button>
+            <MobileCommandTrigger />
           </header>
           <main className="flex-1 p-4 md:p-8">
             <OnboardingChecklistWidget

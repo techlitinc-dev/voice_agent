@@ -13,6 +13,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # Build needs a DATABASE_URL-shaped var present; it is not used at build time.
 ARG DATABASE_URL="postgresql://build:build@localhost:5432/build"
 ENV DATABASE_URL=$DATABASE_URL
+ARG NODE_OPTIONS="--max-old-space-size=2048"
+ENV NODE_OPTIONS=$NODE_OPTIONS
 RUN npx prisma generate && npm run build
 
 # ---- runner ----

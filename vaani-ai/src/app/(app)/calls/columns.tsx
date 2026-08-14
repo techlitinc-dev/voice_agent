@@ -1,3 +1,5 @@
+"use client";
+
 import type { Column, ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
 import { ArrowUpDown } from "lucide-react";

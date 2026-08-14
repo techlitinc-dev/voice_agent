@@ -3,12 +3,56 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import type { LucideIcon } from "lucide-react";
+import {
+  ArrowRightLeft,
+  BarChart3,
+  BookOpen,
+  Bot,
+  FileBarChart,
+  FileText,
+  Inbox,
+  KanbanSquare,
+  LayoutDashboard,
+  Megaphone,
+  Phone,
+  PhoneCall,
+  PhoneForwarded,
+  Radio,
+  Settings,
+  Sparkles,
+  Store,
+  Users,
+  Wallet,
+  type LucideIcon,
+} from "lucide-react";
 
 export type SidebarNavItem = {
   label: string;
   href: string;
-  icon: LucideIcon;
+  /** Icon name from nav-config — resolved via ICONS below (client-side). */
+  icon: string;
+};
+
+const ICONS: Record<string, LucideIcon> = {
+  ArrowRightLeft,
+  BarChart3,
+  BookOpen,
+  Bot,
+  FileBarChart,
+  FileText,
+  Inbox,
+  KanbanSquare,
+  LayoutDashboard,
+  Megaphone,
+  Phone,
+  PhoneCall,
+  PhoneForwarded,
+  Radio,
+  Settings,
+  Sparkles,
+  Store,
+  Users,
+  Wallet,
 };
 
 export function SidebarLink({
@@ -22,7 +66,7 @@ export function SidebarLink({
 }) {
   const pathname = usePathname();
   const active = pathname === item.href || pathname.startsWith(item.href + "/");
-  const Icon = item.icon;
+  const Icon = ICONS[item.icon] ?? Sparkles;
 
   return (
     <Link

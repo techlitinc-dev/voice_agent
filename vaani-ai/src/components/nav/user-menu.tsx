@@ -14,15 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ChevronDown, LogOut, Settings, User } from "lucide-react";
 
-export function UserMenu({
-  name,
-  email,
-  onOpenCommandPalette,
-}: {
-  name: string;
-  email: string;
-  onOpenCommandPalette?: () => void;
-}) {
+export function UserMenu({ name, email }: { name: string; email: string }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -49,7 +41,7 @@ export function UserMenu({
             <Settings className="mr-2 h-4 w-4" /> Settings
           </Link>
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => onOpenCommandPalette?.()}>
+        <DropdownMenuItem onSelect={() => document.dispatchEvent(new Event("vaani:open-command"))}>
           <span className="mr-2 flex h-4 w-4 items-center justify-center">
             <Kbd>⌘K</Kbd>
           </span>
