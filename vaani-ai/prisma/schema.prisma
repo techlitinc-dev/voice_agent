@@ -113,6 +113,12 @@ model Workspace {
   tasks                Task[]
   segments             Segment[]
   leadScores           LeadScore[]
+  // Approval Workflows (docs/new-features/05 §3.7): deals ≥ this value (paise)
+  // moving INTO a stage in approvalRequiredStages need manager approval.
+  // null = approvals disabled for the workspace.
+  approvalThresholdPaise Int?
+  approvalRequiredStages String[] @default([]) // stage NAMES, e.g. ["Negotiation","Won"]
+  approvalRequests    ApprovalRequest[]
 }
 
 model User {
@@ -133,6 +139,8 @@ model User {
   transfersAccepted     TransferRequest[]
   callbackTasksAssigned CallbackTask[]
   ownedDeals            Deal[]    @relation("DealOwner")
+  approvalRequestsMade  ApprovalRequest[] @relation("ApprovalRequester")
+  approvalRequestsDecided ApprovalRequest[] @relation("ApprovalDecider")
   assignedTasks         Task[]    @relation("TaskAssignee")
   dealNotes             DealNote[]
   activities            Activity[]
@@ -560,6 +568,10 @@ model Contact {
   consentSource String? // e.g. "web-form", "csv-upload", "verbal"
   optOutAt      DateTime? // set when the contact opts out mid-call or via SMS
   crmExternalId String? // id of this contact in the connected CRM (two-way sync)
+  // Smart Retries v2 (docs/new-features/05 §3.5): per-contact optimal call
+  // windows learned from answer patterns, e.g. {"mon":["18-21"],"tue":["18-21"]}.
+  optimalCallWindows  Json?     // hour blocks (HH) per weekday the contact answers most
+  lastRetryAnalysisAt DateTime? // when the retry-analysis worker last scored this contact
   createdAt     DateTime  @default(now())
 
   workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -751,6 +763,7 @@ model Deal {
   notes           DealNote[]
   tasks           Task[]
   calls           Call[]     @relation("DealCalls")
+  approvalRequests ApprovalRequest[]
   owner           User?      @relation("DealOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   createdFromCall Call?      @relation("DealSourceCall", fields: [createdFromCallId], references: [id], onDelete: SetNull)
 
@@ -788,6 +801,10 @@ enum ActivityType {
   TASK_COMPLETED
   CONTACT_UPDATED
   MANUAL
+  // Approval Workflows (docs/new-features/05 §3.7)
+  APPROVAL_REQUESTED
+  APPROVAL_RESOLVED
+  APPROVAL_REJECTED
 }
 
 model Activity {
@@ -856,6 +873,37 @@ model Task {
 
   @@index([workspaceId, status, dueAt])
   @@index([assigneeId, status])
+  @@index([dealId])
+}
+
+// ---------- Approval Workflows (docs/new-features/05 §3.7) ----------
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model ApprovalRequest {
+  id                 String         @id @default(cuid())
+  workspaceId        String
+  dealId             String
+  requestedByUserId  String
+  requestedStageId   String // the stage the requester asked to move to
+  fromStageId        String // stage at request time (revert target on reject)
+  valuePaise         Int // deal value at request time — snapshot for the approver
+  status             ApprovalStatus @default(PENDING)
+  approvedByUserId   String?
+  decidedAt          DateTime?
+  note               String? // approver's note on approve/reject
+  createdAt          DateTime       @default(now())
+
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  deal         Deal      @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  requestedBy  User      @relation("ApprovalRequester", fields: [requestedByUserId], references: [id], onDelete: Cascade)
+  approvedBy   User?     @relation("ApprovalDecider", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status, createdAt])
   @@index([dealId])
 }
 
@@ -1070,6 +1118,9 @@ model Call {
   scriptAdherenceScore Int? // 0-100, set by QA scoring
   piiRedacted          Boolean        @default(false) // transcript was PII-redacted (spec 11)
   recordingKey         String? // MinIO object key
+  // Call Highlights Reel (docs/new-features/05 §3.6): MinIO object key of the
+  // auto-generated ~30s highlight clip (objection handling / successful close).
+  highlightsKey        String?
   transcript           String? // full plain-text transcript (full-text-search ready)
   // Sentiment & emotion analytics (docs/new-features/02): per-turn caller
   // timeline + overall trend, computed by the post-call sentiment worker.
@@ -1276,6 +1327,9 @@ model WebhookDelivery {
   responseCode   Int?
   nextRetryAt    DateTime? // consumed by the webhook retry worker
   deliveredAt    DateTime?
+  // Webhook v2 (docs/new-features/05 §3.9): per-attempt history for the retry
+  // backoff timeline. [{attempt:1, at:ISO, responseCode:number|null, error:string|null}]
+  attemptLog      Json?
   createdAt      DateTime              @default(now())
 
   subscription WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)

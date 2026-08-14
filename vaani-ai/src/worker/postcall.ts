@@ -8,6 +8,7 @@ import { computeDeadAirSeconds } from "../lib/qa/deadair";
 import { rubricForCall } from "../lib/qa/rubrics";
 import { scoreWithLlm } from "../lib/qa/scorer";
 import { classifyEmotion, summarizeSentiment, avgScore, overallLabel, type SentimentPoint } from "../lib/sentiment";
+import { generateHighlights } from "./highlights";
 
 const db = new PrismaClient();
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
@@ -21,7 +22,10 @@ export async function postCallSweep(take = 5): Promise<number> {
       qaScores: { none: {} },
     },
     include: {
-      transcriptEntries: { orderBy: { timestampMs: "asc" }, select: { id: true, speaker: true, timestampMs: true, text: true } },
+      transcriptEntries: {
+        orderBy: { timestampMs: "asc" },
+        select: { id: true, speaker: true, timestampMs: true, text: true, sentiment: true, sentimentScore: true },
+      },
     },
     orderBy: { endedAt: "asc" },
     take,
@@ -122,6 +126,29 @@ export async function postCallSweep(take = 5): Promise<number> {
             : {}),
         },
       });
+
+      // 5) Call Highlights Reel (docs/new-features/05 §3.6): only when the full
+      //    recording is already in MinIO (not a pending: URL). Graceful — a
+      //    missing recording / ffmpeg failure just leaves highlightsKey null and
+      //    the call is still marked processed (it has a QaScore).
+      const recordingKey = call.recordingKey && !call.recordingKey.startsWith("pending:") ? call.recordingKey : null;
+      if (recordingKey && !call.highlightsKey) {
+        const hl = await generateHighlights({
+          callId: call.id,
+          workspaceId: call.workspaceId,
+          recordingKey,
+          entries: call.transcriptEntries.map((e) => ({
+            speaker: e.speaker,
+            text: e.text,
+            timestampMs: e.timestampMs,
+            sentiment: e.sentiment,
+            sentimentScore: e.sentimentScore,
+          })),
+        });
+        if (hl) {
+          await db.call.update({ where: { id: call.id }, data: { highlightsKey: hl.key } });
+        }
+      }
 
       processed += 1;
       log(`[postcall] scored ${call.id} rubric=${rubric.name} total=${qa.totalScore}/${qa.maxScore} deadAir=${deadAir}s hallucination=${qa.hallucination} sentiment=${timeline.length} turns overall=${overall} penalty=${sentimentPenalty}%`);

@@ -1,7 +1,7 @@
 import {
   PhoneIncoming, PhoneOutgoing, MessageSquare, MessageCircle, Mail,
   FileText, ArrowRightCircle, PlusCircle, Trophy, XCircle, Calendar,
-  CheckCircle2, UserCog, PenLine, type LucideIcon,
+  CheckCircle2, UserCog, PenLine, Stamp, type LucideIcon,
 } from "lucide-react";
 import type { ActivityType } from "@prisma/client";
 
@@ -21,6 +21,9 @@ const META: Record<ActivityType, { icon: LucideIcon; color: string }> = {
   TASK_COMPLETED:     { icon: CheckCircle2,    color: "bg-teal-100 text-teal-700" },
   CONTACT_UPDATED:    { icon: UserCog,         color: "bg-slate-100 text-slate-700" },
   MANUAL:             { icon: FileText,        color: "bg-gray-100 text-gray-700" },
+  APPROVAL_REQUESTED: { icon: Stamp,           color: "bg-amber-100 text-amber-700" },
+  APPROVAL_RESOLVED:  { icon: Stamp,           color: "bg-green-100 text-green-700" },
+  APPROVAL_REJECTED:  { icon: Stamp,           color: "bg-red-100 text-red-700" },
 };
 
 export const activityIcon = (type: ActivityType): LucideIcon => META[type]?.icon ?? FileText;
@@ -42,4 +45,7 @@ export const ACTIVITY_TYPE_LABELS: Record<ActivityType, string> = {
   TASK_COMPLETED: "Task completed",
   CONTACT_UPDATED: "Contact updated",
   MANUAL: "Manual entry",
+  APPROVAL_REQUESTED: "Approval requested",
+  APPROVAL_RESOLVED: "Approval approved",
+  APPROVAL_REJECTED: "Approval rejected",
 };

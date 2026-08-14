@@ -13,7 +13,7 @@ describe("permission vocabulary", () => {
       "agents:read", "agents:write",
       "campaigns:read", "campaigns:write", "campaigns:launch",
       "contacts:read", "contacts:write", "contacts:import",
-      "deals:read", "deals:write", "deals:delete",
+      "deals:read", "deals:write", "deals:delete", "deals:approve",
       "pipelines:write",
       "segments:read", "segments:write", "segments:delete",
       "calls:read", "recordings:read", "analytics:read",
@@ -54,6 +54,14 @@ describe("role defaults (spec 3.2)", () => {
     }
     expect(ROLE_PERMISSIONS.MANAGER).not.toContain("users:write");
     expect(ROLE_PERMISSIONS.MANAGER).not.toContain("billing:read");
+  });
+
+  it("MANAGER and ADMIN can approve deals (deals:approve); AGENT cannot", () => {
+    expect(ROLE_PERMISSIONS.OWNER).toContain("deals:approve");
+    expect(ROLE_PERMISSIONS.ADMIN).toContain("deals:approve");
+    expect(ROLE_PERMISSIONS.MANAGER).toContain("deals:approve");
+    expect(ROLE_PERMISSIONS.AGENT).not.toContain("deals:approve");
+    expect(ROLE_PERMISSIONS.VIEWER).not.toContain("deals:approve");
   });
 
   it("AGENT (supervisor) gets live listen/whisper/barge but not campaigns", () => {

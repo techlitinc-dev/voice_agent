@@ -82,3 +82,20 @@ export async function objectUrl(key: string): Promise<string> {
   await ensureBucket();
   return s3.presignedGetObject(RECORDINGS_BUCKET, key, 15 * 60);
 }
+
+/**
+ * Fetch a stored object's bytes (Call Highlights Reel §3.6 — the worker reads
+ * the full recording, cuts segments, and re-uploads the reel). Returns null when
+ * the object is missing.
+ */
+export async function getObject(key: string): Promise<Buffer | null> {
+  await ensureBucket();
+  try {
+    const stream = await s3.getObject(RECORDINGS_BUCKET, key);
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    return Buffer.concat(chunks);
+  } catch {
+    return null;
+  }
+}

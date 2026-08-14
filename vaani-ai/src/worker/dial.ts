@@ -8,7 +8,7 @@ import { PrismaClient, type Agent } from "@prisma/client";
 import { dograhTriggerCall } from "../lib/dograh";
 import { resolveAgentForCall } from "../lib/ab-test"; // guide 05 A/B + version routing
 import { sendWhatsAppGated } from "./whatsapp"; // dry-run gate over guide 04's canonical client
-import { parseRetryPolicy, computeNextRetry, isDisposition, type Disposition } from "../lib/campaign/retry";
+import { parseRetryPolicy, computeNextRetryAligned, isDisposition, type Disposition } from "../lib/campaign/retry";
 import { shouldSendWhatsAppFallback } from "../lib/campaign/fallback";
 import type {
   DialJobData,
@@ -199,7 +199,19 @@ export async function dialJob(job: Job<DialJobData>): Promise<void> {
   const success = result === "completed";
   const next = success
     ? { retry: false, nextAttemptAt: null }
-    : computeNextRetry(policy, result as Disposition, attempts, defaults, new Date(), Math.random);
+    : computeNextRetryAligned({
+        policy,
+        disposition: result as Disposition,
+        attemptsSoFar: attempts,
+        defaults,
+        now: new Date(),
+        rand: Math.random,
+        // Smart Retries v2: align into the contact's learned optimal windows.
+        contactTimezone: contact.timezone,
+        contactOptimalWindows: (contact.optimalCallWindows as Record<string, string[]> | null) ?? null,
+        windowStart: campaign.callingWindowStart,
+        windowEnd: campaign.callingWindowEnd,
+      });
 
   await db.campaignContact.update({
     where: { id: cc.id },

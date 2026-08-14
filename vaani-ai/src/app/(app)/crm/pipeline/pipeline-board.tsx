@@ -32,6 +32,7 @@ export function PipelineBoard({
   });
 
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   async function onDragEnd(result: DropResult) {
     const { source, destination, draggableId } = result;
@@ -59,8 +60,21 @@ export function PipelineBoard({
         [toStage]: nextDst.filter((d) => d.id !== draggableId),
       });
       setError(res.error ?? "Move failed.");
+      setNotice(null);
+    } else if (res.pendingApproval) {
+      // Approval Workflows: the move needs manager sign-off — put the card back
+      // in its original stage and tell the user it's pending.
+      setByStage({
+        ...byStage,
+        [fromStage]: [...src, ...nextSrc.filter((d) => d.id !== draggableId)],
+        [toStage]: nextDst.filter((d) => d.id !== draggableId),
+      });
+      setError(null);
+      setNotice("Approval requested — a manager must approve the move before it completes.");
+      router.refresh();
     } else {
       setError(null);
+      setNotice(null);
       router.refresh();
     }
   }
@@ -68,6 +82,7 @@ export function PipelineBoard({
   return (
     <div>
       {error && <p className="mb-3 rounded border border-red-300 bg-red-50 p-2 text-sm text-red-700">{error}</p>}
+      {notice && <p className="mb-3 rounded border border-amber-300 bg-amber-50 p-2 text-sm text-amber-800">{notice}</p>}
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="flex gap-4 overflow-x-auto pb-4" data-testid="pipeline-board">
           {stages.map((stage) => {

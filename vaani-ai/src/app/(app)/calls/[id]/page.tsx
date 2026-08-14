@@ -31,6 +31,11 @@ export default async function CallDetailPage({ params }: { params: { id: string 
     audioUrl = await recordingUrl(call.recordingKey).catch(() => null);
   }
 
+  let highlightsUrl: string | null = null;
+  if (call.highlightsKey) {
+    highlightsUrl = await recordingUrl(call.highlightsKey).catch(() => null);
+  }
+
   const costRows = [
     ["Telephony (Vobiz)", call.costTelephonyPaise],
     ["Speech-to-text (Sarvam)", call.costSttPaise],
@@ -174,6 +179,19 @@ export default async function CallDetailPage({ params }: { params: { id: string 
         </Card>
       ) : call.recordingKey?.startsWith("pending:") ? (
         <p className="text-sm text-muted-foreground">Recording is being ingested — refresh in a minute.</p>
+      ) : null}
+
+      {highlightsUrl ? (
+        <Card>
+          <CardHeader><CardTitle>Highlight reel</CardTitle></CardHeader>
+          <CardContent>
+            <audio controls src={highlightsUrl} className="w-full" data-testid="call-highlights-player" />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Auto-generated ~30s reel of the best moments (objection handling, successful close).
+              Link expires in 15 minutes.
+            </p>
+          </CardContent>
+        </Card>
       ) : null}
 
       {call.hallucinationFlag && call.hallucinationNotes && (

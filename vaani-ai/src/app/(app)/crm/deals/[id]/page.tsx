@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
+import { db } from "@/lib/db";
 import { requireWorkspace } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
 import { getDealDetail } from "@/lib/crm";
@@ -43,8 +44,15 @@ export default async function DealDetailPage({ params }: { params: { id: string 
   const deal = await getDealDetail(ctx.workspaceId, params.id);
   if (!deal) notFound();
 
+  const pendingApprovals = await db.approvalRequest.findMany({
+    where: { workspaceId: ctx.workspaceId, dealId: deal.id, status: "PENDING" },
+    include: { requestedBy: { select: { fullName: true, email: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+
   const canWrite = hasPermission(ctx.membership, "deals:write");
   const canDelete = hasPermission(ctx.membership, "deals:delete");
+  const canApprove = hasPermission(ctx.membership, "deals:approve");
 
   const attributes = (deal.attributes ?? {}) as Record<string, unknown>;
 
@@ -78,6 +86,18 @@ export default async function DealDetailPage({ params }: { params: { id: string 
           {canDelete && <DeleteDealButton dealId={deal.id} title={deal.title} />}
         </div>
       </div>
+
+      {/* Pending approval banner (Approval Workflows, docs/new-features/05 §3.7) */}
+      {pendingApprovals.length > 0 && (
+        <div data-testid="deal-pending-approval" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+          <p className="font-medium">⏳ {pendingApprovals.length} pending approval request{pendingApprovals.length > 1 ? "s" : ""} for this deal.</p>
+          <p className="mt-1 text-xs">
+            Requested by {pendingApprovals.map((r) => r.requestedBy.fullName || r.requestedBy.email).join(", ")} —{" "}
+            <Link href="/crm/approvals" className="underline">review in Approvals</Link>
+            {canApprove ? " or resolve below." : "."}
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Left: tabs (tasks / notes / activity) */}

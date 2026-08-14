@@ -10,6 +10,7 @@
  */
 import { PrismaClient } from "@prisma/client";
 import { nextBackoffMs, signWebhookPayload, WEBHOOK_MAX_ATTEMPTS } from "../lib/webhook-sign";
+import { appendAttemptLog } from "../lib/webhook-delivery-log";
 
 const db = new PrismaClient();
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
@@ -26,7 +27,18 @@ export async function deliverWebhooks(take = 10): Promise<number> {
   for (const delivery of due) {
     const sub = delivery.subscription;
     if (!sub.active) {
-      await db.webhookDelivery.update({ where: { id: delivery.id }, data: { status: "FAILED" } });
+      await db.webhookDelivery.update({
+        where: { id: delivery.id },
+        data: {
+          status: "FAILED",
+          attemptLog: appendAttemptLog(delivery.attemptLog, {
+            attempt: delivery.attempts + 1,
+            at: new Date().toISOString(),
+            responseCode: null,
+            error: "subscription inactive",
+          }),
+        },
+      });
       continue;
     }
     const rawBody = JSON.stringify({ id: delivery.id, ...delivery.payload as Record<string, unknown> });
@@ -46,7 +58,18 @@ export async function deliverWebhooks(take = 10): Promise<number> {
       if (res.ok) {
         await db.webhookDelivery.update({
           where: { id: delivery.id },
-          data: { status: "SUCCESS", attempts, responseCode: res.status, deliveredAt: new Date() },
+          data: {
+            status: "SUCCESS",
+            attempts,
+            responseCode: res.status,
+            deliveredAt: new Date(),
+            attemptLog: appendAttemptLog(delivery.attemptLog, {
+              attempt: attempts,
+              at: new Date().toISOString(),
+              responseCode: res.status,
+              error: null,
+            }),
+          },
         });
         log(`[webhooks] delivered ${delivery.id} event=${delivery.event} -> ${res.status}`);
       } else {
@@ -62,6 +85,12 @@ export async function deliverWebhooks(take = 10): Promise<number> {
           attempts,
           responseCode: statusCode ? Number(statusCode) : null,
           nextRetryAt: exhausted ? null : new Date(Date.now() + nextBackoffMs(attempts)),
+          attemptLog: appendAttemptLog(delivery.attemptLog, {
+            attempt: attempts,
+            at: new Date().toISOString(),
+            responseCode: statusCode ? Number(statusCode) : null,
+            error: (e as Error).message ?? "network error",
+          }),
         },
       });
       log(`[webhooks] attempt ${attempts}/${WEBHOOK_MAX_ATTEMPTS} failed for ${delivery.id}${exhausted ? " — giving up" : ""}`);

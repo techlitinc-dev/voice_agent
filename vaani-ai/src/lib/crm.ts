@@ -45,6 +45,29 @@ export async function findDefaultPipeline(workspaceId: string) {
   });
 }
 
+/**
+ * Approval Workflows (docs/new-features/05 §3.7): should moving a deal into
+ * `stageName` require manager approval? Pure — easily unit-tested.
+ *  - Approvals disabled when threshold is null.
+ *  - The deal value must be >= threshold.
+ *  - The target stage name must be in approvalRequiredStages.
+ *  - The actor must NOT already hold deals:approve (managers approving their own
+ *    moves is fine — they're the approver; a non-approver always needs one).
+ */
+export function requiresApproval(input: {
+  valuePaise: number;
+  thresholdPaise: number | null | undefined;
+  approvalRequiredStages: string[];
+  stageName: string;
+  canApprove: boolean; // actor holds deals:approve
+}): boolean {
+  if (input.thresholdPaise == null) return false;
+  if (input.valuePaise < input.thresholdPaise) return false;
+  if (!input.approvalRequiredStages.includes(input.stageName)) return false;
+  if (input.canApprove) return false;
+  return true;
+}
+
 /** All pipelines with their stages, ordered. */
 export async function listPipelines(workspaceId: string) {
   return db.pipeline.findMany({

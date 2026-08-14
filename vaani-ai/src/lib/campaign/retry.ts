@@ -1,3 +1,5 @@
+import { alignRetryToWindow } from "./optimal";
+
 /**
  * Retry policy (readme §6.1 "configurable attempts per disposition, smart spacing").
  * Campaign.retryPolicy JSON overrides per disposition; scalar maxAttempts/retryDelayMin
@@ -99,4 +101,36 @@ export function computeNextRetry(
     retry: true,
     nextAttemptAt: new Date(now.getTime() + computeRetryDelayMs(rule.delayMin, attemptsSoFar, rand)),
   };
+}
+
+/**
+ * Smart Retries v2 (docs/new-features/05 §3.5): computeNextRetry + alignment of
+ * the naive nextAttemptAt into the next open calling window (contact optimal
+ * windows learned from answer patterns, else the campaign default window).
+ * Pure — `now`/`rand` injected. Falls back to the unaligned candidate when the
+ * contact has no window data (identical to computeNextRetry then).
+ */
+export function computeNextRetryAligned(input: {
+  policy: RetryPolicy;
+  disposition: Disposition;
+  attemptsSoFar: number;
+  defaults: { maxAttempts: number; retryDelayMin: number };
+  now: Date;
+  rand: () => number;
+  contactTimezone?: string | null;
+  contactOptimalWindows?: Record<string, string[]> | null;
+  windowStart: string; // campaign callingWindowStart fallback
+  windowEnd: string; // campaign callingWindowEnd fallback
+}): { retry: boolean; nextAttemptAt: Date | null } {
+  const base = computeNextRetry(input.policy, input.disposition, input.attemptsSoFar, input.defaults, input.now, input.rand);
+  if (!base.retry || !base.nextAttemptAt) return base;
+  const aligned = alignRetryToWindow({
+    now: input.now,
+    candidate: base.nextAttemptAt,
+    contactTimezone: input.contactTimezone,
+    contactOptimalWindows: input.contactOptimalWindows,
+    windowStart: input.windowStart,
+    windowEnd: input.windowEnd,
+  });
+  return { retry: true, nextAttemptAt: aligned };
 }

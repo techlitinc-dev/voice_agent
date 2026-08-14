@@ -7,6 +7,8 @@ const LINKS = [
   { href: "/settings/sessions", label: "Sessions" },
   { href: "/settings/audit-log", label: "Audit log" },
   { href: "/settings/voices", label: "Custom voices" },
+  { href: "/settings/crm", label: "CRM approvals" },
+  { href: "/settings/webhooks/deliveries", label: "Webhook deliveries" },
 ];
 
 export function SettingsNav() {

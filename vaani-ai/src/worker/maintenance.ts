@@ -14,7 +14,7 @@
 import { PrismaClient } from "@prisma/client";
 import { getDialerQueue, CALLBACK_DIAL_JOB } from "../lib/queue";
 import { buildCallbackDialJob } from "../lib/dialJobs"; // guide 06 producer helpers
-import { parseRetryPolicy, computeNextRetry, type Disposition } from "../lib/campaign/retry";
+import { parseRetryPolicy, computeNextRetryAligned, type Disposition } from "../lib/campaign/retry";
 import { shouldSendWhatsAppFallback } from "../lib/campaign/fallback";
 import { sendWhatsAppGated } from "./whatsapp";
 import { detectOptOut, needsHumanEscalation } from "../lib/campaign/scoring";
@@ -65,7 +65,7 @@ async function reconcileCall(call: {
   if (!call.campaignId) return;
   const cc = await db.campaignContact.findFirst({
     where: { campaignId: call.campaignId, lastCallId: call.id, status: "COMPLETED" },
-    include: { campaign: true, contact: { select: { phone: true, name: true } } },
+    include: { campaign: true, contact: { select: { phone: true, name: true, timezone: true, optimalCallWindows: true } } },
   });
   if (!cc) return; // already reconciled
 
@@ -75,7 +75,19 @@ async function reconcileCall(call: {
     : "no-answer";
   const policy = parseRetryPolicy(cc.campaign.retryPolicy);
   const defaults = { maxAttempts: cc.campaign.maxAttempts, retryDelayMin: cc.campaign.retryDelayMin };
-  const next = computeNextRetry(policy, disposition, cc.attempts, defaults, new Date(), Math.random);
+  const next = computeNextRetryAligned({
+    policy,
+    disposition,
+    attemptsSoFar: cc.attempts,
+    defaults,
+    now: new Date(),
+    rand: Math.random,
+    // Smart Retries v2: align into the contact's learned optimal windows.
+    contactTimezone: cc.contact.timezone,
+    contactOptimalWindows: (cc.contact.optimalCallWindows as Record<string, string[]> | null) ?? null,
+    windowStart: cc.campaign.callingWindowStart,
+    windowEnd: cc.campaign.callingWindowEnd,
+  });
 
   await db.campaignContact.update({
     where: { id: cc.id },

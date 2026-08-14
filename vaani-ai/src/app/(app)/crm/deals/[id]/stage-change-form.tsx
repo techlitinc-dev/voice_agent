@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Select } from "@/components/ui/select";
 import { updateDealStageAction } from "@/server/actions/crm";
 import type { Stage, Deal } from "@prisma/client";
@@ -22,7 +23,16 @@ export function StageChangeForm({
     setBusy(true);
     const res = await updateDealStageAction(deal.id, e.target.value);
     setBusy(false);
-    if (res.ok) router.refresh();
+    if (res.ok && res.pendingApproval) {
+      // Approval Workflows (docs/new-features/05 §3.7): keep the select at the
+      // original stage — the move waits for manager approval.
+      toast.info("Approval requested — a manager must approve the move before it completes.");
+      router.refresh();
+    } else if (res.ok) {
+      router.refresh();
+    } else {
+      toast.error(res.error ?? "Could not move the deal.");
+    }
   }
 
   return (

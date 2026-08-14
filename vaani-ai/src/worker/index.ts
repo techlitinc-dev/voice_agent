@@ -29,6 +29,7 @@ import { postCallSweep } from "./postcall";
 import { deliverWebhooks } from "./webhook-delivery";
 import { startCronJobs } from "./cron";
 import { gdprSweep } from "./gdpr";
+import { runRetryAnalysisSweep } from "./retry-analysis";
 
 const DRY_RUN = process.env.CAMPAIGN_DRY_RUN !== "false"; // default true — safe
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
@@ -123,6 +124,10 @@ async function main() {
     });
     cron.schedule("0 3 * * *", () => {
       resetDailyCaps().catch((e) => console.error("[cron] resetDailyCaps", e));
+    });
+    // Smart Retries v2 (docs/new-features/05 §3.5): nightly optimal-window learning.
+    cron.schedule("0 2 * * *", () => {
+      runRetryAnalysisSweep().catch((e) => console.error("[cron] retry-analysis", e));
     });
   }
 

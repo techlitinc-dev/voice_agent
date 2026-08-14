@@ -2,8 +2,8 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireWorkspace } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { WEBHOOK_EVENTS } from "@/lib/webhook-events";
 import { createWebhookSubscription, deleteWebhookSubscription, sendTestWebhook } from "@/server/actions/webhooks";
+import { EventBuilder } from "./event-builder";
 
 export const dynamic = "force-dynamic";
 
@@ -50,13 +50,7 @@ export default async function WebhookSettingsPage() {
             <input name="url" required placeholder="https://yourapp.example/hooks/vaani"
               data-testid="webhook-url-input"
               className="h-9 w-full rounded-md border border-border bg-transparent px-3 text-sm" />
-            <div className="flex flex-wrap gap-3 text-sm">
-              {WEBHOOK_EVENTS.map((e) => (
-                <label key={e} className="flex items-center gap-1">
-                  <input type="checkbox" name="events" value={e} /> {e}
-                </label>
-              ))}
-            </div>
+            <EventBuilder />
             <button data-testid="webhook-create-button"
               className="h-9 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground">
               Create subscription

@@ -97,3 +97,52 @@ export function isWithinTraiHours(now: Date, timeZone?: string | null): boolean 
   const hhmm = localHHMM(now, timeZone ?? DEFAULT_TIMEZONE);
   return hhmm >= TRAI_START && hhmm < TRAI_END;
 }
+
+/**
+ * The next time `now` falls inside ANY permitted calling window, scanning forward
+ * hour by hour. Pure + clock-injected (matches retry.ts). Used by Smart Retries v2
+ * to align a retry's nextAttemptAt to an open window instead of a naive now+delay
+ * that can land outside the calling window and sit idle until the next tick.
+ * Returns `now` unchanged when it is already inside a window. Falls back to the
+ * campaign default window (windowStart/windowEnd) when no per-contact windows are
+ * given (timezoneWindows.windows overrides both). Returns null when the campaign
+ * window itself is invalid.
+ */
+export function nextOpenWindowTime(
+  now: Date,
+  input: WindowInput & { contactOptimalWindows?: Record<string, string[]> | null }
+): Date | null {
+  const perContact = input.contactOptimalWindows;
+  const wins: [string, string][] = input.timezoneWindows?.windows
+    ?? (perContact && Object.keys(perContact).length > 0
+      ? Object.entries(perContact).map(([d, hs]) => [d, toWindowEnd(hs)] as [string, string])
+      : [[input.windowStart, input.windowEnd] as [string, string]]);
+  if (wins.length === 0) return null;
+
+  // If already inside a permitted window right now, stay put.
+  if (isWithinCallingWindows({ ...input, timezoneWindows: input.timezoneWindows ?? { windows: wins } })) {
+    return now;
+  }
+
+  const hourMs = 3600_000;
+  const MAX_SCAN = 24 * 7; // up to a week ahead; campaigns retry within hours
+  for (let i = 1; i <= MAX_SCAN; i++) {
+    const candidate = new Date(now.getTime() + i * hourMs);
+    if (isWithinCallingWindows({ ...input, now: candidate, timezoneWindows: input.timezoneWindows ?? { windows: wins } })) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+/** "18:00" → "21:00" for a per-contact windows entry (["18-21"] → end "21"). */
+function toWindowEnd(blocks: string[]): string {
+  if (blocks.length === 0) return "23:59";
+  const last = blocks[blocks.length - 1];
+  const m = /^(\d{1,2})-(\d{1,2})$/.exec(last);
+  if (!m) return "23:59";
+  const start = Number(m[1]);
+  const end = Number(m[2]);
+  if (Number.isNaN(start) || Number.isNaN(end)) return "23:59";
+  return `${String(end).padStart(2, "0")}:00`;
+}
