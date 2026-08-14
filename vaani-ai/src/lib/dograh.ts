@@ -24,6 +24,13 @@ const PATHS = {
   usageRuns: "/api/v1/organizations/usage/runs",
   triggerByUuid: (uuid: string) => `/api/v1/public/agent/workflow/${uuid}`,
   createTestRun: (id: number) => `/api/v1/workflow/${id}/runs`,
+  // Supervisor live-coaching (real-time call coaching, docs/new-features/01).
+  // OPERATOR GATE: Dograh has no documented supervisor endpoint yet (verified
+  // against its OpenAPI spec — only call triggers + run lifecycle exist). The
+  // path below is the one the feature doc targets; until Dograh ships it, the
+  // caller (POST /api/calls/[id]/whisper) falls back to persisting the whisper
+  // on LiveCallState.whisperContext, which the dashboard surfaces on handoff.
+  supervisor: (dograhCallId: string) => `/api/v1/calls/${dograhCallId}/supervisor`,
 };
 
 export class DograhError extends Error {
@@ -413,6 +420,30 @@ export type DograhTestRun = {
  */
 export async function dograhCreateTestRun(workflowId: number): Promise<DograhTestRun> {
   return request("POST", PATHS.createTestRun(workflowId), {});
+}
+
+// ---------- Real-time call coaching (docs/new-features/01) ----------
+
+export type DograhSupervisorAction =
+  | { mode: "listen" }
+  | { mode: "whisper"; text: string }
+  | { mode: "barge" }
+  | { mode: "takeover" };
+
+/**
+ * Send a supervisor action (listen / whisper / barge / takeover) for a live call.
+ *
+ * OPERATOR GATE: Dograh does NOT expose this endpoint yet — see PATHS.supervisor.
+ * When it does, this posts the action and (for whisper) the text, which Dograh
+ * injects as TTS heard only by the agent. Until then, the route that calls this
+ * catches DograhError and falls back to persisting the whisper on
+ * LiveCallState.whisperContext.
+ */
+export async function dograhSupervisorAction(
+  dograhCallId: string,
+  action: DograhSupervisorAction
+): Promise<void> {
+  await request("POST", PATHS.supervisor(dograhCallId), action);
 }
 
 /** Deep link into the Dograh WEB UI (visual flow editor / browser test call). */

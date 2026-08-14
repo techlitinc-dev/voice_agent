@@ -5,20 +5,12 @@ import { revalidatePath } from "next/cache";
 import type { LiveMode } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
-import type { PermissionKey } from "@/lib/permissions";
 import { audit } from "@/lib/audit";
-import { canTransitionLiveMode, validateWhisperText, LIVE_MODES, type LiveModeName } from "@/lib/liveState";
+import { canTransitionLiveMode, validateWhisperText, permissionForMode, LIVE_MODES, type LiveModeName } from "@/lib/liveState";
 
 export type ActionResult = { ok: boolean; error?: string };
 
 const modeSchema = z.enum(LIVE_MODES);
-
-/** RBAC: each supervisor mode is gated on its own permission key (guide 03). */
-function permissionForMode(mode: LiveModeName): PermissionKey {
-  if (mode === "WHISPER") return "live:whisper";
-  if (mode === "BARGE" || mode === "TAKEOVER") return "live:barge";
-  return "live:listen"; // NONE (release) and LISTEN need the base live key
-}
 
 async function loadActiveCall(callId: string, workspaceId: string) {
   const call = await db.call.findFirst({

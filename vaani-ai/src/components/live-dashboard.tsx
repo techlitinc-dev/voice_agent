@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,12 +68,23 @@ export function LiveDashboard() {
         <Card key={c.id} data-testid="live-call-row">
           <CardContent className="space-y-3 p-4">
             <div className="flex flex-wrap items-center gap-3">
-              <span className="font-mono font-semibold">{c.fromNumber}</span>
+              <Link
+                href={`/live/${c.id}`}
+                className="font-mono font-semibold underline-offset-4 hover:underline"
+                data-testid="live-call-link"
+              >
+                {c.fromNumber}
+              </Link>
               <span className="text-sm text-muted-foreground">→ {c.toNumber}</span>
               <span className="rounded bg-muted px-2 py-0.5 text-xs">{c.status}</span>
               <span className="rounded bg-muted px-2 py-0.5 text-xs">mode: {c.mode}</span>
               <span className="text-xs text-muted-foreground">{c.agentName}</span>
               <div className="ml-auto flex gap-2">
+                <Button asChild size="sm" variant="outline" data-testid="live-open-coach">
+                  <Link href={`/live/${c.id}`}>
+                    Coach <ArrowUpRight className="h-3.5 w-3.5" />
+                  </Link>
+                </Button>
                 <Button size="sm" variant="outline" data-testid="live-listen-btn"
                   onClick={() => act(c.id, () => setLiveModeAction(c.id, "LISTEN"))}>
                   Listen

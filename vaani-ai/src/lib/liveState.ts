@@ -15,6 +15,13 @@ export function canTransitionLiveMode(from: LiveModeName, to: LiveModeName): boo
   return ALLOWED[from].includes(to);
 }
 
+/** Map a supervisor mode to the permission key that gates it (guide 03). */
+export function permissionForMode(mode: LiveModeName): "live:listen" | "live:whisper" | "live:barge" {
+  if (mode === "WHISPER") return "live:whisper";
+  if (mode === "BARGE" || mode === "TAKEOVER") return "live:barge";
+  return "live:listen"; // NONE (release) and LISTEN need the base live key
+}
+
 export const WHISPER_MAX_LEN = 500;
 
 export function validateWhisperText(
