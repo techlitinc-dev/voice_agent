@@ -4,6 +4,7 @@ import { requireWorkspace } from "@/lib/auth";
 import { cache, crmStatsKey } from "@/lib/cache";
 import { formatINR } from "@/lib/money";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 import {
   getCrmStats, getDateRange, getFunnel, getRevenueTimeSeries, getRevenueBySource,
@@ -16,18 +17,6 @@ import { Download } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "CRM Analytics — Vaani AI" };
-
-function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <Card data-testid={`stat-${label.toLowerCase().replace(/\s+/g, "-")}`}>
-      <CardHeader><CardTitle className="text-sm text-muted-foreground">{label}</CardTitle></CardHeader>
-      <CardContent>
-        <p className="text-2xl font-bold">{value}</p>
-        {sub && <p className="mt-1 text-xs text-muted-foreground">{sub}</p>}
-      </CardContent>
-    </Card>
-  );
-}
 
 export default async function CrmAnalyticsPage({
   searchParams,

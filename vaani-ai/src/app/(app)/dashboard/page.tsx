@@ -7,6 +7,7 @@ import { formatINR } from "@/lib/money";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Download, PhoneCall, PhoneIncoming, IndianRupee, Percent, Users, Star } from "lucide-react";
+import { StatCard } from "@/components/ui/stat-card";
 import { DateRangePicker } from "@/components/analytics/date-range-picker";
 import { getDateRange, previousRange } from "@/lib/analytics";
 import {
@@ -19,11 +20,14 @@ import {
   getKpiWithTrend,
 } from "@/lib/dashboard/queries";
 import { LiveTiles } from "./live-tiles";
-import { KpiCard } from "./kpi-card";
 import { CallsOverTime, RevenueVsCost, CallsByAgent, CallsByCampaign, CallsBySource } from "./charts";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Dashboard — Vaani AI" };
+
+function kpiId(label: string): string {
+  return `kpi-${label.toLowerCase().replace(/\s+/g, "-")}`;
+}
 
 function KpiRow(props: {
   kpis: Awaited<ReturnType<typeof getKpiWithTrend>>;
@@ -32,41 +36,47 @@ function KpiRow(props: {
   const { kpis, csat } = props;
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6" data-testid="kpi-row">
-      <KpiCard
+      <StatCard
         label="Calls"
         value={String(kpis.totalCalls.value)}
         trend={{ value: kpis.totalCalls.trend, positive: kpis.totalCalls.trend >= 0 }}
-        icon={<PhoneCall className="w-4 h-4" />}
+        icon={PhoneCall}
+        className={kpiId("Calls")}
       />
-      <KpiCard
+      <StatCard
         label="Connect rate"
         value={`${kpis.connectRate.value}%`}
         trend={{ value: kpis.connectRate.trend, positive: kpis.connectRate.trend >= 0 }}
-        icon={<PhoneIncoming className="w-4 h-4" />}
+        icon={PhoneIncoming}
+        className={kpiId("Connect rate")}
       />
-      <KpiCard
+      <StatCard
         label="Revenue"
         value={formatINR(kpis.revenue.value)}
         trend={{ value: kpis.revenue.trend, positive: kpis.revenue.trend >= 0 }}
-        icon={<IndianRupee className="w-4 h-4" />}
+        icon={IndianRupee}
+        className={kpiId("Revenue")}
       />
-      <KpiCard
+      <StatCard
         label="Gross margin"
         value={`${kpis.marginPct.value}%`}
         trend={{ value: kpis.marginPct.trend, positive: kpis.marginPct.trend >= 0 }}
-        icon={<Percent className="w-4 h-4" />}
+        icon={Percent}
+        className={kpiId("Gross margin")}
       />
-      <KpiCard
+      <StatCard
         label="CSAT"
         value={`${csat.value}%`}
         sub={csat.scored > 0 ? `${csat.scored} scored` : "no scores yet"}
-        icon={<Star className="w-4 h-4" />}
+        icon={Star}
+        className={kpiId("CSAT")}
       />
-      <KpiCard
+      <StatCard
         label="Active users"
         value={String(kpis.activeUsers.value)}
         trend={{ value: kpis.activeUsers.trend, positive: kpis.activeUsers.trend >= 0 }}
-        icon={<Users className="w-4 h-4" />}
+        icon={Users}
+        className={kpiId("Active users")}
       />
     </div>
   );

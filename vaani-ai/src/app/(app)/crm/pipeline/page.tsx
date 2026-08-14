@@ -9,7 +9,8 @@ import { CreatePipelineForm } from "../create-pipeline-form";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Plus } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Plus, Workflow } from "lucide-react";
 
 export const metadata = { title: "Pipeline — Vaani AI" };
 
@@ -37,7 +38,11 @@ export default async function PipelinePage({
   if (pipelines.length === 0) {
     return (
       <div className="mx-auto max-w-xl space-y-4">
-        <p className="text-muted-foreground">No pipeline yet. Create one to start tracking deals.</p>
+        <EmptyState
+          icon={Workflow}
+          title="No pipeline yet"
+          description="Create one to start tracking deals through stages."
+        />
         {canCreatePipeline && <CreatePipelineForm />}
       </div>
     );
@@ -94,7 +99,11 @@ export default async function PipelinePage({
       </div>
 
       {stages.length === 0 ? (
-        <p className="text-muted-foreground">This pipeline has no stages.</p>
+        <EmptyState
+          icon={Workflow}
+          title="This pipeline has no stages"
+          description="Add stages like New, Qualified, Proposal, and Won to start moving deals forward."
+        />
       ) : (
         <PipelineBoard stages={stages} deals={deals} canWrite={canWrite} />
       )}

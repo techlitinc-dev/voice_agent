@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 import { requireWorkspace } from "@/lib/auth";
 import { evaluateSegment, parseSegmentRules } from "@/lib/crm";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Users } from "lucide-react";
 import { DeleteSegmentButton } from "./delete-segment-button";
 import { CreateCampaignButton } from "./create-campaign-button";
 
@@ -79,7 +81,15 @@ export default async function SegmentDetailPage({
               );
             })}
             {members.length === 0 && (
-              <tr><td colSpan={4} className="p-6 text-center text-muted-foreground">No contacts match this segment yet.</td></tr>
+              <tr>
+                <td colSpan={4} className="p-0">
+                  <EmptyState
+                    icon={Users}
+                    title="No contacts match this segment yet"
+                    description="Adjust the segment rules, or add contacts with matching attributes."
+                  />
+                </td>
+              </tr>
             )}
           </tbody>
         </table>

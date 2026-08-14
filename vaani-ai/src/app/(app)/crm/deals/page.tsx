@@ -4,15 +4,24 @@ import { db } from "@/lib/db";
 import { requireWorkspace } from "@/lib/auth";
 import { fetchDeals } from "@/lib/crm";
 import { formatINR } from "@/lib/money";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Plus } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
+import { DealStatusBadge } from "@/components/ui/status-badges";
+import { Plus, Target } from "lucide-react";
 
 export const metadata = { title: "Deals — Vaani AI" };
 
-const STATUS_VARIANT = { OPEN: "info", WON: "success", LOST: "danger" } as const;
 const PRIORITY_VARIANT = { low: "secondary", medium: "info", high: "warning", urgent: "danger" } as const;
 
 export default async function DealsPage({
@@ -92,56 +101,62 @@ export default async function DealsPage({
         <Button type="submit" variant="outline" size="sm">Apply</Button>
       </form>
 
-      <div className="overflow-x-auto rounded-lg border bg-card">
-        <table className="w-full text-sm" data-testid="deals-table">
-          <thead>
-            <tr className="border-b text-left text-muted-foreground">
-              <th className="p-3">Title</th>
-              <th className="p-3">Contact</th>
-              <th className="p-3 text-right">Value</th>
-              <th className="p-3">Stage</th>
-              <th className="p-3">Status</th>
-              <th className="p-3">Priority</th>
-              <th className="p-3">Owner</th>
-              <th className="p-3">Expected close</th>
-              <th className="p-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {deals.map((d) => (
-              <tr key={d.id} className="border-b last:border-0 hover:bg-muted/40">
-                <td className="p-3 font-medium">
-                  <Link href={`/crm/deals/${d.id}`} className="hover:text-primary">{d.title}</Link>
-                </td>
-                <td className="p-3">
-                  {d.contact ? (
-                    <Link href={`/contacts?q=${encodeURIComponent(d.contact.phone ?? "")}`} className="hover:text-primary">
-                      {d.contact.name ?? d.contact.phone}
-                    </Link>
-                  ) : "—"}
-                </td>
-                <td className="p-3 text-right font-semibold">{formatINR(d.valuePaise)}</td>
-                <td className="p-3">
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full" style={{ background: d.stage.color ?? "#94a3b8" }} />
-                    {d.stage.name}
-                  </span>
-                </td>
-                <td className="p-3"><Badge variant={STATUS_VARIANT[d.status]}>{d.status}</Badge></td>
-                <td className="p-3"><Badge variant={PRIORITY_VARIANT[d.priority as keyof typeof PRIORITY_VARIANT] ?? "secondary"}>{d.priority}</Badge></td>
-                <td className="p-3">{d.owner?.fullName ?? "—"}</td>
-                <td className="p-3 text-muted-foreground">{d.expectedClose ? d.expectedClose.toLocaleDateString("en-IN") : "—"}</td>
-                <td className="p-3">
-                  <Link href={`/crm/deals/${d.id}`} className="text-primary hover:underline">View</Link>
-                </td>
-              </tr>
-            ))}
-            {deals.length === 0 && (
-              <tr><td colSpan={9} className="p-6 text-center text-muted-foreground">No deals match the current filters.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {deals.length === 0 ? (
+        <EmptyState
+          icon={Target}
+          title="No deals match the current filters"
+          description="Adjust the filters above, or create a new deal to start tracking revenue in your pipeline."
+          action={{ label: "New deal", href: "/crm/deals/new" }}
+        />
+      ) : (
+        <div className="overflow-x-auto rounded-lg border bg-card">
+          <Table data-testid="deals-table">
+            <TableHeader>
+              <TableRow className="text-left text-muted-foreground">
+                <TableHead>Title</TableHead>
+                <TableHead>Contact</TableHead>
+                <TableHead className="text-right">Value</TableHead>
+                <TableHead>Stage</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Priority</TableHead>
+                <TableHead>Owner</TableHead>
+                <TableHead>Expected close</TableHead>
+                <TableHead></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {deals.map((d) => (
+                <TableRow key={d.id}>
+                  <TableCell className="font-medium">
+                    <Link href={`/crm/deals/${d.id}`} className="hover:text-primary">{d.title}</Link>
+                  </TableCell>
+                  <TableCell>
+                    {d.contact ? (
+                      <Link href={`/contacts?q=${encodeURIComponent(d.contact.phone ?? "")}`} className="hover:text-primary">
+                        {d.contact.name ?? d.contact.phone}
+                      </Link>
+                    ) : "—"}
+                  </TableCell>
+                  <TableCell className="text-right font-semibold">{formatINR(d.valuePaise)}</TableCell>
+                  <TableCell>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full" style={{ background: d.stage.color ?? "#94a3b8" }} />
+                      {d.stage.name}
+                    </span>
+                  </TableCell>
+                  <TableCell><DealStatusBadge status={d.status} /></TableCell>
+                  <TableCell><Badge variant={PRIORITY_VARIANT[d.priority as keyof typeof PRIORITY_VARIANT] ?? "secondary"}>{d.priority}</Badge></TableCell>
+                  <TableCell>{d.owner?.fullName ?? "—"}</TableCell>
+                  <TableCell className="text-muted-foreground">{d.expectedClose ? d.expectedClose.toLocaleDateString("en-IN") : "—"}</TableCell>
+                  <TableCell>
+                    <Link href={`/crm/deals/${d.id}`} className="text-primary hover:underline">View</Link>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
       {totalPages > 1 && (
         <div className="flex items-center gap-2">

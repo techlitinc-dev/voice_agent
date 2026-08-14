@@ -1,31 +1,16 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireWorkspace } from "@/lib/auth";
 import { searchCallIdsByTranscript } from "@/lib/fts";
-import { Card, CardContent } from "@/components/ui/card";
-import { formatINR } from "@/lib/money";
+import { DataTable } from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PhoneOff } from "lucide-react";
 import { exportCallsToSheet } from "@/server/actions/sheets";
-
-const STATUS_COLOR: Record<string, string> = {
-  COMPLETED: "text-green-400",
-  FAILED: "text-red-400",
-  NO_ANSWER: "text-orange-400",
-  BUSY: "text-orange-400",
-  IN_PROGRESS: "text-blue-400",
-  RINGING: "text-blue-400",
-  VOICEMAIL: "text-muted-foreground",
-};
+import { callColumns, type CallRow } from "./columns";
 
 async function pushToSheets() {
   "use server";
   await exportCallsToSheet();
-}
-
-function fmtDur(sec: number) {
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
 export const metadata = { title: "Calls — Vaani AI" };
@@ -117,54 +102,15 @@ export default async function CallsPage({
         </p>
       )}
 
-      <Card>
-        <CardContent className="overflow-x-auto p-0">
-          <table className="w-full text-sm" data-testid="calls-table">
-            <thead>
-              <tr className="border-b text-left text-muted-foreground">
-                <th className="p-3">When</th><th className="p-3">Dir</th><th className="p-3">From → To</th>
-                <th className="p-3">Agent</th><th className="p-3">Status</th><th className="p-3">Duration</th>
-                <th className="p-3">Outcome</th><th className="p-3">Billed</th><th className="p-3">QA</th>
-                <th className="p-3">Summary</th>
-              </tr>
-            </thead>
-            <tbody>
-              {calls.map((c) => (
-                <tr key={c.id} className="border-b last:border-0 hover:bg-muted/40">
-                  <td className="p-3 whitespace-nowrap text-muted-foreground">
-                    {c.createdAt.toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" })}
-                  </td>
-                  <td className="p-3">{c.direction === "INBOUND" ? "↙" : "↗"}</td>
-                  <td className="p-3 font-mono text-xs">
-                    <Link href={`/calls/${c.id}`} className="hover:text-primary hover:underline">
-                      {c.fromNumber} → {c.toNumber}
-                    </Link>
-                  </td>
-                  <td className="p-3">{c.agent?.name ?? "—"}</td>
-                  <td className={`p-3 ${STATUS_COLOR[c.status] ?? ""}`}>{c.status}</td>
-                  <td className="p-3">{fmtDur(c.durationSec)}</td>
-                  <td className="p-3">{c.outcome ?? "—"}</td>
-                  <td className="p-3">{c.billedPaise > 0 ? formatINR(c.billedPaise) : "—"}</td>
-                  <td className="p-3">
-                    {c.scriptAdherenceScore !== null ? (
-                      <span data-testid={`call-qa-score-${c.id}`}
-                        className={`rounded-full border px-2 py-0.5 text-xs ${c.scriptAdherenceScore >= 70 ? "text-green-400" : "text-orange-400"}`}>
-                        {c.scriptAdherenceScore}
-                      </span>
-                    ) : "—"}
-                  </td>
-                  <td className="max-w-64 truncate p-3 text-muted-foreground">{c.summary ?? "—"}</td>
-                </tr>
-              ))}
-              {calls.length === 0 && (
-                <tr><td colSpan={10} className="p-8 text-center text-muted-foreground">
-                  No calls match. They appear here the moment your agent answers or dials.
-                </td></tr>
-              )}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
+      {calls.length === 0 ? (
+        <EmptyState
+          icon={PhoneOff}
+          title="No calls yet"
+          description="Calls appear here the moment your agent answers or dials. Try clearing the filters to see the full list."
+        />
+      ) : (
+        <DataTable columns={callColumns} data={calls as CallRow[]} searchKey="fromNumber" searchPlaceholder="Search calls…" />
+      )}
     </div>
   );
 }

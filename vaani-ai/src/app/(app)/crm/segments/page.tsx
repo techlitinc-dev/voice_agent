@@ -4,7 +4,8 @@ import { requireWorkspace } from "@/lib/auth";
 import { fetchSegments } from "@/lib/crm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Plus, Users } from "lucide-react";
 
 export const metadata = { title: "Segments — Vaani AI" };
 
@@ -40,7 +41,12 @@ export default async function SegmentsPage() {
           </Link>
         ))}
         {segments.length === 0 && (
-          <p className="text-muted-foreground">No segments yet — create one to group contacts dynamically.</p>
+          <EmptyState
+            icon={Users}
+            title="No segments yet"
+            description="Group contacts dynamically by rules (interest, activity, or custom attributes)."
+            action={{ label: "New segment", href: "/crm/segments/new" }}
+          />
         )}
       </div>
     </div>

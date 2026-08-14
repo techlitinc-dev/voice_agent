@@ -129,8 +129,12 @@ export function ReportBuilder({
 
   async function handleSchedule() {
     const r = await saveReport({ name: name || config.title || "Untitled report", visibility, config });
-    if (!r.ok || !r.id) {
+    if (!r.ok) {
       setError(r.error ?? "Save failed");
+      return;
+    }
+    if (!r.id) {
+      setError("Save failed");
       return;
     }
     const s = await scheduleReport({ reportId: r.id, frequency, recipients });

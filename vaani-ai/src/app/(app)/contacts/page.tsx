@@ -6,6 +6,8 @@ import { CrmImportButton } from "./crm-import-button";
 import { toggleDncAction } from "@/server/actions/contacts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PhoneOff } from "lucide-react";
 
 export const metadata = { title: "Contacts — Vaani AI" };
 export default async function ContactsPage({
@@ -66,7 +68,16 @@ export default async function ContactsPage({
 
       <Card>
         <CardHeader><CardTitle>{contacts.length} contacts (latest 200)</CardTitle></CardHeader>
-        <CardContent className="overflow-x-auto">
+        {contacts.length === 0 ? (
+          <CardContent>
+            <EmptyState
+              icon={PhoneOff}
+              title="No contacts yet"
+              description="Upload a CSV or import from a connected CRM to build your contact list."
+            />
+          </CardContent>
+        ) : (
+          <CardContent className="overflow-x-auto">
           <table className="w-full text-sm" data-testid="contacts-table">
             <thead>
               <tr className="border-b text-left text-muted-foreground">
@@ -105,7 +116,8 @@ export default async function ContactsPage({
               ))}
             </tbody>
           </table>
-        </CardContent>
+          </CardContent>
+        )}
       </Card>
     </div>
   );
