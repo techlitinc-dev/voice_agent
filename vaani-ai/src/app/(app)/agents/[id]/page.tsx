@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requireWorkspace } from "@/lib/auth";
 import { AgentForm } from "../agent-form";
 import { VersionsTab } from "./versions-tab";
+import { getAbComparison } from "@/lib/ab-test-query";
 import { ToolsTab } from "./tools-tab";
 import { EditorActions } from "./editor-actions";
 import { KnowledgeManager } from "../../knowledge/knowledge-manager";
@@ -34,7 +35,7 @@ export default async function EditAgentPage({
   });
   if (!agent) notFound();
 
-  const [versions, docs, agents, customVoices] = await Promise.all([
+  const [versions, docs, agents, customVoices, abComparison] = await Promise.all([
     tab === "versions"
       ? db.agentVersion.findMany({
           where: { agentId: agent.id, workspaceId: ctx.workspaceId },
@@ -58,6 +59,9 @@ export default async function EditAgentPage({
       where: { workspaceId: ctx.workspaceId },
       select: { id: true, name: true, status: true },
     }),
+    tab === "versions"
+      ? getAbComparison(ctx.workspaceId, agent.id)
+      : Promise.resolve(null),
   ]);
 
   return (
@@ -99,7 +103,7 @@ export default async function EditAgentPage({
       ) : tab === "tools" ? (
         <ToolsTab agentId={agent.id} toolConfigs={agent.toolConfigs} />
       ) : (
-        <VersionsTab agentId={agent.id} agentName={agent.name} versions={versions} />
+        <VersionsTab agentId={agent.id} agentName={agent.name} versions={versions} abComparison={abComparison} />
       )}
     </div>
   );

@@ -78,17 +78,17 @@ export async function resolveWorkflowForAgent(
   agent: Agent,
   workspaceId: string,
   callerPhone?: string
-): Promise<{ dograhWorkflowId: string; dograhWorkflowUuid: string } | null> {
+): Promise<{ dograhWorkflowId: string; dograhWorkflowUuid: string; versionId: string | null } | null> {
   const versions = await db.agentVersion.findMany({
     where: { agentId: agent.id, workspaceId, status: "PUBLISHED" },
     select: { id: true, isAbVariant: true, abTrafficPercent: true, dograhWorkflowId: true, dograhWorkflowUuid: true },
   });
   const resolved = resolveAgentForCall({ agentId: agent.id, callerPhone, publishedVersions: versions });
   const wf = resolved ?? (agent.dograhWorkflowId
-    ? { dograhWorkflowId: agent.dograhWorkflowId, dograhWorkflowUuid: agent.dograhWorkflowUuid }
+    ? { dograhWorkflowId: agent.dograhWorkflowId, dograhWorkflowUuid: agent.dograhWorkflowUuid, versionId: null as string | null }
     : null);
   if (!wf || !wf.dograhWorkflowUuid) return null;
-  return { dograhWorkflowId: wf.dograhWorkflowId, dograhWorkflowUuid: wf.dograhWorkflowUuid };
+  return { dograhWorkflowId: wf.dograhWorkflowId, dograhWorkflowUuid: wf.dograhWorkflowUuid, versionId: resolved?.versionId ?? null };
 }
 
 export async function dialJob(job: Job<DialJobData>): Promise<void> {
@@ -181,6 +181,7 @@ export async function dialJob(job: Job<DialJobData>): Promise<void> {
           fromNumber,
           toNumber: contact.phone,
           agentId: campaign.agentId,
+          agentVersionId: wf.versionId, // A/B attribution (docs 05 §3.8)
           campaignId: campaign.id,
         },
       });

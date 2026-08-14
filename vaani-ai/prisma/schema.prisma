@@ -384,6 +384,7 @@ model AgentVersion {
 
   agent     Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  calls     Call[]    // back-relation for Call.agentVersionId (A/B attribution)
 
   @@unique([agentId, version])
   @@index([workspaceId])
@@ -1050,6 +1051,7 @@ model Call {
   fromNumber           String
   toNumber             String
   agentId              String?
+  agentVersionId       String? // which AgentVersion served this call (A/B attribution, docs 05 §3.8)
   campaignId           String?
   startedAt            DateTime       @default(now())
   answeredAt           DateTime?
@@ -1082,6 +1084,7 @@ model Call {
 
   workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   agent             Agent?             @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  agentVersion      AgentVersion?      @relation(fields: [agentVersionId], references: [id], onDelete: SetNull)
   campaign          Campaign?          @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   events            CallEvent[]
   transcriptEntries TranscriptEntry[]

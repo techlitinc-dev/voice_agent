@@ -19,10 +19,12 @@ export function VersionsTab({
   agentId,
   agentName,
   versions,
+  abComparison = null,
 }: {
   agentId: string;
   agentName: string;
   versions: AgentVersion[];
+  abComparison?: import("@/lib/ab-test-stats").AbComparison | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -153,6 +155,67 @@ export function VersionsTab({
             </form>
           ) : (
             <p className="text-sm text-muted-foreground">Publish a version first — A/B needs a live version to clone.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">A/B results</CardTitle></CardHeader>
+        <CardContent>
+          {!abComparison || abComparison.versions.filter((v) => v.isAbVariant).length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No A/B test running. Create a variant above — once both versions have
+              attributed calls you&apos;ll see conversion comparison here.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {abComparison.versions.map((v) => (
+                <div
+                  key={v.versionId}
+                  className={`rounded-md border p-3 ${
+                    abComparison.winnerVersionId === v.versionId ? "border-green-500/60 bg-green-500/5" : ""
+                  }`}
+                  data-testid={`ab-result-${v.versionId}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium">
+                      {v.isAbVariant ? `Variant v${v.version}` : `Main v${v.version}`}
+                      {v.label ? <span className="ml-2 text-xs text-muted-foreground">{v.label}</span> : null}
+                      {v.isAbVariant && <span className="ml-2 text-xs text-muted-foreground">({v.abTrafficPercent}% traffic)</span>}
+                    </p>
+                    {abComparison.winnerVersionId === v.versionId && (
+                      <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400" data-testid="ab-winner-badge">
+                        🏆 Winner
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-muted-foreground">
+                    <div>
+                      <p className="font-medium text-foreground">{v.calls}</p>
+                      <p>calls</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">{Math.round(v.conversionRate * 100)}%</p>
+                      <p>conversion</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">
+                        {v.avgSentiment !== null ? v.avgSentiment.toFixed(2) : "—"}
+                      </p>
+                      <p>avg sentiment</p>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {v.converted}/{v.completed} completed calls with a positive outcome (booked / qualified / payment).
+                  </p>
+                </div>
+              ))}
+              {!abComparison.hasWinner && (
+                <p className="text-xs text-muted-foreground">
+                  Need at least {abComparison.minCalls} attributed calls per version to call a winner.
+                </p>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>

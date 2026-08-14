@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { verifyDograhWebhook } from "@/lib/dograhWebhook";
 import { processCompletedCall } from "@/lib/postcall";
 import { emitWebhookEvent } from "@/lib/webhooks";
+import { resolveAgentForCall } from "@/lib/ab-test";
 
 type Data = Record<string, unknown>;
 
@@ -58,6 +59,20 @@ export async function POST(req: NextRequest) {
       if (!workspaceId) {
         return NextResponse.json({ ok: false, error: "no workspace" }, { status: 409 });
       }
+      // A/B attribution (docs 05 §3.8): resolve the serving published version
+      // deterministically from the caller's phone, mirroring the outbound path.
+      let agentVersionId: string | null = null;
+      if (pn?.agentId) {
+        const fromNumber = str(data.from_number);
+        const versions = await db.agentVersion.findMany({
+          where: { agentId: pn.agentId, workspaceId, status: "PUBLISHED" },
+          select: { id: true, isAbVariant: true, abTrafficPercent: true, dograhWorkflowId: true, dograhWorkflowUuid: true },
+        });
+        const resolved = fromNumber
+          ? resolveAgentForCall({ agentId: pn.agentId, callerPhone: fromNumber, publishedVersions: versions })
+          : null;
+        agentVersionId = resolved?.versionId ?? null;
+      }
       call = await db.call.create({
         data: {
           workspaceId,
@@ -67,6 +82,7 @@ export async function POST(req: NextRequest) {
           fromNumber: str(data.from_number) ?? "unknown",
           toNumber,
           agentId: pn?.agentId ?? null,
+          agentVersionId,
           answeredAt: new Date(),
         },
       });
