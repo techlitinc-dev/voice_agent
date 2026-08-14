@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import {
   WIZARD_STEPS,
   type OnboardingChecklist,
@@ -308,10 +308,9 @@ export function WizardClient(props: Props) {
                 <div className="space-y-2">
                   <p className="text-sm font-medium">Option B — register a DID you already own (from your Vobiz dashboard):</p>
                   <div className="flex gap-2">
-                    <Input
+                    <PhoneInput
                       value={numberInput}
-                      onChange={(e) => setNumberInput(e.target.value)}
-                      placeholder="+918040001234"
+                      onChange={setNumberInput}
                       data-testid="onboarding-number-input"
                       className="max-w-xs"
                     />

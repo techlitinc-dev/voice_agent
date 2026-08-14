@@ -13,6 +13,7 @@ import {
 } from "@/server/actions/knowledge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dropzone } from "@/components/ui/dropzone";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const STATUS_STYLE: Record<string, string> = {
@@ -36,6 +37,7 @@ export function KnowledgeManager({
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [file, setFile] = useState<File | null>(null);
 
   async function run(label: string, fn: () => Promise<{ ok: boolean; error?: string }>) {
     setBusy(label); setError(null);
@@ -54,23 +56,30 @@ export function KnowledgeManager({
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
-                const f = new FormData(e.currentTarget);
+                if (!file) return;
+                const f = new FormData();
+                f.set("file", file);
+                f.set("title", (new FormData(e.currentTarget).get("title") as string) || file.name);
                 if (fixedAgentId) f.set("agentId", fixedAgentId);
                 await run("upload", () => uploadKbDocumentAction(f));
                 (e.target as HTMLFormElement).reset();
+                setFile(null);
               }}
               className="space-y-3"
             >
               <Input name="title" placeholder="Title (e.g. Price list 2025)" required />
-              <input name="file" type="file" accept=".pdf,.docx" required
-                className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:text-primary-foreground" />
+              <Dropzone
+                onUpload={setFile}
+                accept={{ "application/pdf": [".pdf"], "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"] }}
+                hint={file ? file.name : "PDF, DOCX up to 10 MB"}
+              />
               {!fixedAgentId && (
                 <select name="agentId" className="h-9 w-full rounded-md border border-border bg-card px-3 text-sm">
                   <option value="">Shared (all agents)</option>
                   {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
               )}
-              <Button type="submit" size="sm" disabled={busy !== null} data-testid="kb-upload-btn">
+              <Button type="submit" size="sm" disabled={busy !== null || !file} data-testid="kb-upload-btn">
                 {busy === "upload" ? "Uploading…" : "Upload"}
               </Button>
             </form>

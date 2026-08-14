@@ -7,6 +7,7 @@ import { loginAction, verifyLoginTotpAction } from "@/server/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
 const GOOGLE_SSO = process.env.NEXT_PUBLIC_GOOGLE_SSO_ENABLED === "true";
 const OIDC_SSO = process.env.NEXT_PUBLIC_OIDC_SSO_ENABLED === "true";
@@ -111,14 +112,33 @@ function LoginForm() {
                   ? "Enter one of your backup codes."
                   : "Enter the 6-digit code from your authenticator app."}
               </p>
-              <Input
-                data-testid="login-totp-input"
-                name="code"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                placeholder={useBackupCode ? "xxxx-xxxx" : "123456"}
-                required
-              />
+              {useBackupCode ? (
+                <Input
+                  data-testid="login-totp-input"
+                  name="code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="xxxx-xxxx"
+                  required
+                />
+              ) : (
+                <div className="flex justify-center">
+                  <InputOTP
+                    data-testid="login-totp-input"
+                    name="code"
+                    maxLength={6}
+                    autoComplete="one-time-code"
+                    required
+                    render={({ slots }) => (
+                      <InputOTPGroup>
+                        {slots.map((slot, i) => (
+                          <InputOTPSlot key={i} index={i} />
+                        ))}
+                      </InputOTPGroup>
+                    )}
+                  />
+                </div>
+              )}
               {error && <p data-testid="login-error" className="text-sm text-red-400">{error}</p>}
               <Button data-testid="login-totp-submit" className="w-full" disabled={loading}>
                 {loading ? "Verifying…" : "Verify"}

@@ -9,6 +9,7 @@ import {
 } from "@/server/actions/totp";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
 export function TotpManager({ enabled }: { enabled: boolean }) {
   const router = useRouter();
@@ -78,14 +79,20 @@ export function TotpManager({ enabled }: { enabled: boolean }) {
           Or enter manually: <code data-testid="totp-secret" className="rounded bg-muted px-2 py-1 text-xs">{enroll.secret}</code>
         </p>
         <form onSubmit={onConfirm} className="flex items-end gap-2">
-          <Input
+          <InputOTP
             data-testid="totp-confirm-input"
             name="code"
-            inputMode="numeric"
-            placeholder="123456"
             maxLength={6}
+            inputMode="numeric"
+            autoComplete="one-time-code"
             required
-            className="w-32"
+            render={({ slots }) => (
+              <InputOTPGroup>
+                {slots.map((slot, i) => (
+                  <InputOTPSlot key={i} index={i} />
+                ))}
+              </InputOTPGroup>
+            )}
           />
           <Button data-testid="totp-confirm-submit" disabled={loading}>
             {loading ? "Verifying…" : "Confirm & enable"}
