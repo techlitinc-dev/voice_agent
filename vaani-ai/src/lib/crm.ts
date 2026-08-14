@@ -302,6 +302,10 @@ export async function getContactCrmData(workspaceId: string, phone: string) {
         },
       },
       campaignContacts: { include: { campaign: true } },
+      conversations: {
+        orderBy: { lastMessageAt: "desc" },
+        include: { messages: { orderBy: { createdAt: "desc" }, take: 1 } },
+      },
     },
   });
   if (!contact) return null;

@@ -10,10 +10,11 @@
 import { Worker } from "bullmq";
 import cron from "node-cron";
 import { createRedisConnection, QUEUES } from "../lib/queue";
-import type { DialJobData, CallbackDialJobData, ManualDialJobData, WhatsAppSendJobData } from "../lib/queue";
+import type { DialJobData, CallbackDialJobData, ManualDialJobData, WhatsAppSendJobData, ChatReplyJobData } from "../lib/queue";
 import { DIAL_JOB, CALLBACK_DIAL_JOB, MANUAL_DIAL_JOB } from "../lib/queue";
 import { schedulerTick } from "./campaignTick";
 import { dialJob, callbackDialJob, manualDialJob, whatsappSendJob } from "./dial";
+import { chatReplyJob } from "./chat-reply";
 import { resetDailyCaps, sweepDueCallbacks, sweepPostCalls } from "./maintenance";
 import {
   chargeMonthlyRentals,
@@ -88,6 +89,13 @@ async function main() {
     limiter: { max: 5, duration: 1000 }, // 5 msgs/sec — provider-friendly throttle
   });
 
+  // Omnichannel AI auto-reply (docs/new-features/04). No limiter — replies are
+  // conversational, not bulk sends.
+  new Worker<ChatReplyJobData>(QUEUES.chatReply, chatReplyJob, {
+    connection,
+    concurrency: 5,
+  });
+
   if (RUN_CRON) {
     setInterval(() => {
       recordingSweeper().catch((e) => console.error("[recordings] sweep error", e));
@@ -134,7 +142,7 @@ async function main() {
     });
   }
 
-  log("worker ready — scheduler + dialer + whatsapp + cron (callbacks, post-call, nightly cap reset)");
+  log("worker ready — scheduler + dialer + whatsapp + chat-reply + cron (callbacks, post-call, nightly cap reset)");
 }
 
 main().catch((e) => {

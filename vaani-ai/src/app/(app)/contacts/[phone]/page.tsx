@@ -9,7 +9,7 @@ import { ActivityTimeline, type TimelineActivity } from "@/components/crm/activi
 import { Tabs } from "@/components/crm/tabs";
 import { LeadScoreBreakdown } from "@/components/crm/lead-score-badge";
 import { TaskRow } from "@/app/(app)/crm/tasks/task-row";
-import { Phone, PhoneCall } from "lucide-react";
+import { Phone, PhoneCall, MessageSquare } from "lucide-react";
 
 export const metadata = { title: "Contact — Vaani AI" };
 
@@ -101,6 +101,7 @@ export default async function ContactDetailPage({ params }: { params: { phone: s
             tabs={[
               { key: "activity", label: "Activity" },
               { key: "calls", label: "Calls" },
+              { key: "messages", label: "Messages" },
               { key: "campaigns", label: "Campaigns" },
             ]}
           >
@@ -131,6 +132,38 @@ export default async function ContactDetailPage({ params }: { params: { phone: s
                           </div>
                         ))}
                         {calls.length === 0 && <p className="text-sm text-muted-foreground">No calls.</p>}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+                {active === "messages" && (
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="space-y-4">
+                        {contact.conversations.length === 0 && (
+                          <p className="text-sm text-muted-foreground">No messaging conversations yet.</p>
+                        )}
+                        {contact.conversations.map((c) => (
+                          <div key={c.id} className="rounded border p-3">
+                            <div className="flex items-center justify-between text-sm">
+                              <p className="flex items-center gap-2 font-medium">
+                                <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                                {c.channel} · {c.status}
+                              </p>
+                              <Link href={`/inbox?id=${c.id}`} className="text-xs text-primary hover:underline">
+                                Open in inbox →
+                              </Link>
+                            </div>
+                            <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+                              {c.messages[0]?.body ?? "No messages yet"}
+                            </p>
+                            {c.lastMessageAt && (
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Last message {c.lastMessageAt.toLocaleString("en-IN")}
+                              </p>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     </CardContent>
                   </Card>

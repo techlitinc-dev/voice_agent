@@ -8,6 +8,7 @@ import { billCall } from "./billing";
 import { enqueueCallbackDial } from "./dialJobs";
 import { parseHumanTransferConfig, decideTransfer } from "./fallbackPolicy";
 import { recomputeLeadScore } from "./crm/scoring";
+import { linkVoiceCallToWhatsApp } from "./inbox";
 
 const CHEAP_MODEL = "deepseek/deepseek-chat";
 const MISSED_CALLBACK_DELAY_MIN = 15;
@@ -420,6 +421,26 @@ export async function processCompletedCall(callId: string, hints: PostCallHints 
       summary: call.summary ?? call.transcript.slice(-500),
       kind: "message",
     });
+  }
+
+  // --- Voice → messaging linkage (docs/new-features/04 §6) --------------------
+  // When the caller needs follow-up, open a WhatsApp conversation so the thread
+  // can continue on WhatsApp with the same AI brain.
+  const FOLLOWUP_OUTCOMES = new Set([
+    "message-taken", "callback-requested", "send-quote", "document-pending",
+    "payment-pending", "booked", "qualified",
+  ]);
+  if (FOLLOWUP_OUTCOMES.has(outcome) && call.direction === "INBOUND") {
+    try {
+      await linkVoiceCallToWhatsApp({
+        workspaceId: call.workspaceId,
+        phone: call.fromNumber,
+        callId: call.id,
+        agentId: call.agentId,
+      });
+    } catch (e) {
+      console.error(`[postcall] whatsapp linkage failed for ${call.id}`, e);
+    }
   }
 
   // --- Fallback policy: escalate to a human queue (spec §7) --------------------

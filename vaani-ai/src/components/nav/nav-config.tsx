@@ -5,6 +5,7 @@ import {
   Bot,
   FileBarChart,
   FileText,
+  Inbox,
   KanbanSquare,
   LayoutDashboard,
   Megaphone,
@@ -54,6 +55,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     section: "CRM",
     items: [
+      { label: "Inbox", href: "/inbox", icon: Inbox },
       { label: "Pipeline", href: "/crm/pipeline", icon: KanbanSquare },
       { label: "Deals", href: "/crm/deals", icon: FileText },
       { label: "Contacts", href: "/contacts", icon: Users },

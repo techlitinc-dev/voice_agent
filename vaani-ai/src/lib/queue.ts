@@ -19,6 +19,7 @@ export const QUEUES = {
   scheduler: "campaign-scheduler",
   dialer: "campaign-dialer", // shared with guide 06 (callback-dial / manual-dial producers)
   whatsapp: "whatsapp-send",
+  chatReply: "chat-reply", // omnichannel AI auto-reply (docs/new-features/04)
 } as const;
 
 // ---------- Job names + payloads (contract — do not rename) ----------
@@ -27,6 +28,7 @@ export const DIAL_JOB = "dial";
 export const CALLBACK_DIAL_JOB = "callback-dial"; // guide 06 contract
 export const MANUAL_DIAL_JOB = "manual-dial"; // guide 06 contract
 export const WHATSAPP_SEND_JOB = "whatsapp-send";
+export const CHAT_REPLY_JOB = "chat-reply";
 
 export type SchedulerJobData = { campaignId: string };
 
@@ -72,11 +74,17 @@ export type WhatsAppSendJobData = {
   total: number; // total recipients (last job marks the campaign COMPLETED)
 };
 
+export type ChatReplyJobData = {
+  conversationId: string;
+  workspaceId: string;
+};
+
 // ---------- Queue singletons ----------
 
 let schedulerQueue: Queue<SchedulerJobData> | null = null;
 let dialerQueue: Queue | null = null;
 let whatsappQueue: Queue<WhatsAppSendJobData> | null = null;
+let chatReplyQueue: Queue<ChatReplyJobData> | null = null;
 
 export function getSchedulerQueue() {
   if (!schedulerQueue) {
@@ -115,6 +123,21 @@ export function getWhatsAppQueue() {
     });
   }
   return whatsappQueue;
+}
+
+export function getChatReplyQueue() {
+  if (!chatReplyQueue) {
+    chatReplyQueue = new Queue<ChatReplyJobData>(QUEUES.chatReply, {
+      connection: createRedisConnection(),
+      defaultJobOptions: {
+        attempts: 2,
+        backoff: { type: "exponential", delay: 5000 },
+        removeOnComplete: 1000,
+        removeOnFail: 5000,
+      },
+    });
+  }
+  return chatReplyQueue;
 }
 
 /** Start a 30s repeatable scheduler tick for a campaign. Idempotent. */

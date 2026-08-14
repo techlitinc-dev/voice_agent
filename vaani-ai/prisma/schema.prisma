@@ -62,6 +62,7 @@ model Workspace {
   memberships          Membership[]
   agents               Agent[]
   customVoices         CustomVoice[]
+  conversations        Conversation[]
   agentVersions        AgentVersion[]
   knowledgeDocuments   KnowledgeDocument[]
   marketplaceTemplates MarketplaceTemplate[] // templates authored BY this workspace
@@ -326,6 +327,7 @@ model Agent {
 
   workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   customVoice        CustomVoice?        @relation(fields: [customVoiceId], references: [id], onDelete: SetNull)
+  conversations      Conversation[]      @relation("ConversationAgent")
   versions           AgentVersion[]
   knowledgeDocuments KnowledgeDocument[]
   toolConfigs        AgentToolConfig[]
@@ -562,6 +564,7 @@ model Contact {
   workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   list             ContactList?      @relation(fields: [listId], references: [id], onDelete: SetNull)
   campaignContacts CampaignContact[]
+  conversations    Conversation[]
   callbackTasks    CallbackTask[]
   deals            Deal[]
   activities       Activity[]
@@ -924,6 +927,60 @@ model WhatsAppCampaign {
   list      ContactList?     @relation(fields: [listId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
+}
+
+// ---------- Omnichannel messaging (docs/new-features/04) ----------
+
+enum ChannelType {
+  VOICE
+  WHATSAPP
+  SMS
+  WEBCHAT
+  EMAIL
+}
+
+model Conversation {
+  id              String      @id @default(cuid())
+  workspaceId     String
+  contactId       String?
+  channel         ChannelType
+  status          String      @default("OPEN") // OPEN | PENDING_AI | PENDING_HUMAN | RESOLVED | ARCHIVED
+  assignedAgentId String? // the AI agent handling this conversation
+  aiEnabled       Boolean     @default(true) // whether AI auto-responds
+
+  // For WhatsApp/SMS: the phone number. For webchat: a session ID
+  externalId     String? // WhatsApp message ID, SMS ID, webchat session id
+
+  lastMessageAt DateTime?
+  unreadCount    Int         @default(0)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  messages      Message[]
+  workspace     Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact       Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  assignedAgent Agent?       @relation("ConversationAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status, lastMessageAt])
+  @@index([workspaceId, channel])
+  @@index([workspaceId, contactId])
+}
+
+model Message {
+  id             String      @id @default(cuid())
+  conversationId String
+  channel        ChannelType
+  direction      String // "inbound" | "outbound"
+  senderType     String // "contact" | "agent" | "ai" | "system"
+  body           String
+  attachments    Json? // [{ type: "image", url: "..." }]
+  status         String      @default("SENT") // PENDING | SENT | DELIVERED | READ | FAILED
+  externalId     String? // WhatsApp/SMS message ID
+  createdAt      DateTime    @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
 }
 
 // ---------- Calls (CDR) & Human-in-the-Loop ----------
