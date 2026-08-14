@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StageChangeForm } from "./stage-change-form";
 import { AddNoteForm } from "./add-note-form";
 import { DeleteDealButton } from "./delete-deal-button";
@@ -15,6 +16,14 @@ import { TaskToggle } from "./task-toggle";
 import { InterestBadge } from "../../interest-badge";
 import { QuickActions } from "@/components/crm/quick-actions";
 import { ActivityTimeline, type TimelineActivity } from "@/components/crm/activity-timeline";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import { Clock } from "lucide-react";
 
 export const metadata = { title: "Deal — Vaani AI" };
@@ -41,6 +50,17 @@ export default async function DealDetailPage({ params }: { params: { id: string 
 
   return (
     <div className="space-y-6" data-testid="deal-detail-page">
+      {/* Breadcrumbs */}
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem><BreadcrumbLink href="/dashboard">Home</BreadcrumbLink></BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem><BreadcrumbLink href="/crm/pipeline">Pipeline</BreadcrumbLink></BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem><BreadcrumbPage>{deal.title}</BreadcrumbPage></BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -60,11 +80,66 @@ export default async function DealDetailPage({ params }: { params: { id: string 
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Left: details (2/3) */}
+        {/* Left: tabs (tasks / notes / activity) */}
         <div className="space-y-6 lg:col-span-2">
+          {/* Tabs: activity / tasks / notes */}
+          <Tabs defaultValue="activity">
+            <TabsList>
+              <TabsTrigger value="activity">Activity</TabsTrigger>
+              <TabsTrigger value="tasks">Tasks ({deal.tasks.length})</TabsTrigger>
+              <TabsTrigger value="notes">Notes ({deal.notes.length})</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="activity" className="pt-4">
+              <ActivityTimeline activities={deal.activities.map((a): TimelineActivity => ({
+                id: a.id,
+                type: a.type,
+                title: a.title,
+                description: a.description,
+                createdAt: a.createdAt.toISOString(),
+                userId: a.userId,
+                userName: null,
+                callId: a.callId,
+              }))} />
+            </TabsContent>
+
+            <TabsContent value="tasks" className="pt-4">
+              <div className="space-y-2 text-sm">
+                {deal.tasks.length === 0 && <p className="text-muted-foreground">No tasks yet.</p>}
+                {deal.tasks.map((t) => (
+                  <div key={t.id} className="flex items-center justify-between rounded-md border p-3">
+                    <div>
+                      <p>{t.title}</p>
+                      <p className="text-xs text-muted-foreground">Due {formatDate(t.dueAt)} · {t.status}</p>
+                    </div>
+                    <TaskToggle taskId={t.id} status={t.status} canWrite={canWrite} />
+                  </div>
+                ))}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="notes" className="pt-4">
+              <div className="space-y-3 text-sm">
+                <AddNoteForm dealId={deal.id} canWrite={canWrite} />
+                {deal.notes.map((n) => (
+                  <div key={n.id} className="rounded-md border p-3">
+                    <p>{n.body}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {n.user?.fullName ?? "AI"} · {formatDate(n.createdAt)}
+                    </p>
+                  </div>
+                ))}
+                {deal.notes.length === 0 && <p className="text-muted-foreground">No notes yet.</p>}
+              </div>
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        {/* Right: summary */}
+        <div className="space-y-6">
           <Card>
             <CardHeader><CardTitle className="text-sm">Deal details</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
+            <CardContent className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <p className="text-xs text-muted-foreground">Value</p>
                 <p className="font-semibold">{formatINR(deal.valuePaise)}</p>
@@ -135,62 +210,6 @@ export default async function DealDetailPage({ params }: { params: { id: string 
               </CardContent>
             </Card>
           )}
-
-          {/* Tasks */}
-          {deal.tasks.length > 0 && (
-            <Card>
-              <CardHeader><CardTitle className="text-sm">Tasks ({deal.tasks.length})</CardTitle></CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                {deal.tasks.map((t) => (
-                  <div key={t.id} className="flex items-center justify-between">
-                    <div>
-                      <p>{t.title}</p>
-                      <p className="text-xs text-muted-foreground">Due {formatDate(t.dueAt)} · {t.status}</p>
-                    </div>
-                    <TaskToggle taskId={t.id} status={t.status} canWrite={canWrite} />
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Notes */}
-          <Card id="quick-note">
-            <CardHeader className="flex-row items-center justify-between space-y-0">
-              <CardTitle className="text-sm">Notes ({deal.notes.length})</CardTitle>
-              <AddNoteForm dealId={deal.id} canWrite={canWrite} />
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              {deal.notes.map((n) => (
-                <div key={n.id} className="rounded-md border p-3">
-                  <p>{n.body}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {n.user?.fullName ?? "AI"} · {formatDate(n.createdAt)}
-                  </p>
-                </div>
-              ))}
-              {deal.notes.length === 0 && <p className="text-muted-foreground">No notes yet.</p>}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Right: timeline */}
-        <div>
-          <Card>
-            <CardHeader><CardTitle className="text-sm">Activity timeline</CardTitle></CardHeader>
-            <CardContent className="pt-6">
-              <ActivityTimeline activities={deal.activities.map((a): TimelineActivity => ({
-                id: a.id,
-                type: a.type,
-                title: a.title,
-                description: a.description,
-                createdAt: a.createdAt.toISOString(),
-                userId: a.userId,
-                userName: null,
-                callId: a.callId,
-              }))} />
-            </CardContent>
-          </Card>
         </div>
       </div>
     </div>

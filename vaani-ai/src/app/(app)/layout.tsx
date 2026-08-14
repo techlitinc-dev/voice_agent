@@ -1,37 +1,18 @@
 import { redirect } from "next/navigation";
 import { requireWorkspace } from "@/lib/auth";
-import { logoutAction } from "@/server/actions/auth";
-import { Button } from "@/components/ui/button";
 import { db } from "@/lib/db";
 import { formatINR } from "@/lib/money";
 import { hexToHslTriplet } from "@/lib/branding";
 import { CHECKLIST_KEYS, parseChecklist, progressPercent } from "@/lib/onboarding";
-import { NavLink } from "./nav-link";
 import { OnboardingResume } from "@/components/onboarding-resume";
 import { OnboardingChecklistWidget } from "@/components/onboarding-checklist";
-import {
-  LayoutDashboard, Bot, PhoneOutgoing, Users, PhoneCall, Radio, ArrowRightLeft, PhoneForwarded,
-  Phone, BarChart3, Wallet, Settings, Store, BookOpen, Sparkles, KanbanSquare, FileBarChart,
-} from "lucide-react";
-
-const NAV = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/agents", label: "Agents", icon: Bot },
-  { href: "/marketplace", label: "Marketplace", icon: Store },
-  { href: "/knowledge", label: "Knowledge", icon: BookOpen },
-  { href: "/campaigns", label: "Campaigns", icon: PhoneOutgoing },
-  { href: "/contacts", label: "Contacts", icon: Users },
-  { href: "/crm", label: "CRM", icon: KanbanSquare },
-  { href: "/calls", label: "Calls", icon: PhoneCall },
-  { href: "/live", label: "Live", icon: Radio },
-  { href: "/transfers", label: "Transfers", icon: ArrowRightLeft },
-  { href: "/dialer", label: "Dialer", icon: PhoneForwarded },
-  { href: "/numbers", label: "Numbers", icon: Phone },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/reports", label: "Reports", icon: FileBarChart },
-  { href: "/billing", label: "Billing", icon: Wallet },
-  { href: "/settings", label: "Settings", icon: Settings },
-];
+import { AppShell } from "./app-shell";
+import { MobileNav } from "@/components/nav/mobile-nav";
+import { SidebarLink } from "@/components/nav/sidebar-link";
+import { UserMenu } from "@/components/nav/user-menu";
+import { Kbd } from "@/components/ui/kbd";
+import { NAV_SECTIONS } from "@/components/nav/nav-config";
+import { Sparkles, Search } from "lucide-react";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   let ctx;
@@ -65,50 +46,93 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const forceWizard = !completed && nothingDone;
 
   return (
-    <div className="flex min-h-screen">
-      {brandTriplet && (
-        <div data-testid="brand-style">
-          <style dangerouslySetInnerHTML={{ __html: `:root{--primary:${brandTriplet};}` }} />
-          {`--primary:${brandTriplet}`}
+    <AppShell>
+      <div className="flex min-h-screen" data-testid="app-sidebar">
+        {brandTriplet && (
+          <div data-testid="brand-style">
+            <style dangerouslySetInnerHTML={{ __html: `:root{--primary:${brandTriplet};}` }} />
+            {`--primary:${brandTriplet}`}
+          </div>
+        )}
+        <OnboardingResume incomplete={forceWizard} />
+
+        {/* Desktop sidebar */}
+        <aside className="hidden w-60 flex-col border-r bg-card md:flex">
+          <div className="flex items-center gap-2 p-5 text-lg font-bold">
+            {workspace.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src="/api/branding/logo" alt={workspace.name} className="h-8 w-8 rounded object-contain" data-testid="app-logo" />
+            ) : null}
+            {brandName ?? (
+              <span>Vaani <span className="text-primary">AI</span></span>
+            )}
+          </div>
+          <nav className="flex-1 space-y-4 overflow-y-auto px-3 pb-4">
+            <button
+              type="button"
+              data-testid="desktop-command-trigger"
+              onClick={() => document.dispatchEvent(new Event("vaani:open-command"))}
+              className="flex w-full items-center gap-3 rounded-md border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <Search className="h-4 w-4 flex-shrink-0" />
+              <span className="flex-1 text-left">Search…</span>
+              <Kbd>⌘K</Kbd>
+            </button>
+            <SidebarLink item={{ label: "Setup", href: "/onboarding", icon: Sparkles }} />
+            {NAV_SECTIONS.map((s) => (
+              <div key={s.section}>
+                <p className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {s.section}
+                </p>
+                <div className="space-y-1">
+                  {s.items.map((item) => (
+                    <SidebarLink key={item.href} item={item} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </nav>
+          <div className="border-t p-4">
+            <p className="text-xs text-muted-foreground">Wallet</p>
+            <p className="font-semibold text-primary">{formatINR(wallet?.balancePaise ?? 0)}</p>
+            <UserMenu
+              name={ctx.user.fullName ?? ctx.user.email}
+              email={ctx.user.email}
+              onOpenCommandPalette={() => document.dispatchEvent(new Event("vaani:open-command"))}
+            />
+          </div>
+        </aside>
+
+        {/* Mobile header */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="flex items-center gap-2 border-b bg-card px-4 py-3 md:hidden">
+            <MobileNav sections={NAV_SECTIONS} />
+            <span className="text-base font-bold">
+              {brandName ?? (
+                <span>Vaani <span className="text-primary">AI</span></span>
+              )}
+            </span>
+            <button
+              type="button"
+              aria-label="Open command menu"
+              data-testid="mobile-command-trigger"
+              className="ml-auto flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+              onClick={() => document.dispatchEvent(new Event("vaani:open-command"))}
+            >
+              <Search className="h-4 w-4" />
+            </button>
+          </header>
+          <main className="flex-1 p-4 md:p-8">
+            <OnboardingChecklistWidget
+              checklist={checklist}
+              progress={progressPercent(checklist)}
+              completed={completed}
+              sampleDataEnabled={onboarding?.sampleDataEnabled ?? false}
+            />
+            {children}
+          </main>
         </div>
-      )}
-      <OnboardingResume incomplete={forceWizard} />
-      <aside className="flex w-60 flex-col border-r bg-card" data-testid="app-sidebar">
-        <div className="flex items-center gap-2 p-5 text-lg font-bold">
-          {workspace.logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src="/api/branding/logo" alt={workspace.name} className="h-8 w-8 rounded object-contain" data-testid="app-logo" />
-          ) : null}
-          {brandName ?? (
-            <span>Vaani <span className="text-primary">AI</span></span>
-          )}
-        </div>
-        <nav className="flex-1 space-y-1 px-3">
-          <NavLink href="/onboarding" label="Setup" icon={<Sparkles />} />
-          {NAV.map((item) => (
-            <NavLink key={item.href} href={item.href} label={item.label} icon={<item.icon className="h-4 w-4" />} />
-          ))}
-        </nav>
-        <div className="border-t p-4">
-          <p className="text-xs text-muted-foreground">Wallet</p>
-          <p className="font-semibold text-primary">{formatINR(wallet?.balancePaise ?? 0)}</p>
-          <p className="mt-2 truncate text-xs text-muted-foreground">{ctx.user.email}</p>
-          <form action={logoutAction} className="mt-2">
-            <Button variant="ghost" size="sm" className="w-full justify-start px-0" data-testid="logout-button">
-              Sign out
-            </Button>
-          </form>
-        </div>
-      </aside>
-      <main className="flex-1 p-8">
-        <OnboardingChecklistWidget
-          checklist={checklist}
-          progress={progressPercent(checklist)}
-          completed={completed}
-          sampleDataEnabled={onboarding?.sampleDataEnabled ?? false}
-        />
-        {children}
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }

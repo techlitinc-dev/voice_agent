@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireWorkspace } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 import { fetchDeals } from "@/lib/crm";
 import { formatINR } from "@/lib/money";
 import {
@@ -18,6 +19,7 @@ import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DealStatusBadge } from "@/components/ui/status-badges";
+import { DealRowActions } from "./deal-row-actions";
 import { Plus, Target } from "lucide-react";
 
 export const metadata = { title: "Deals — Vaani AI" };
@@ -42,6 +44,7 @@ export default async function DealsPage({
   } catch {
     redirect("/login");
   }
+  const canDelete = hasPermission(ctx.membership, "deals:delete");
 
   const page = Math.max(1, Number(searchParams.page ?? 1) || 1);
   const take = 50;
@@ -148,8 +151,8 @@ export default async function DealsPage({
                   <TableCell><Badge variant={PRIORITY_VARIANT[d.priority as keyof typeof PRIORITY_VARIANT] ?? "secondary"}>{d.priority}</Badge></TableCell>
                   <TableCell>{d.owner?.fullName ?? "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{d.expectedClose ? d.expectedClose.toLocaleDateString("en-IN") : "—"}</TableCell>
-                  <TableCell>
-                    <Link href={`/crm/deals/${d.id}`} className="text-primary hover:underline">View</Link>
+                  <TableCell className="text-right">
+                    <DealRowActions deal={{ id: d.id, title: d.title }} canDelete={canDelete} />
                   </TableCell>
                 </TableRow>
               ))}
