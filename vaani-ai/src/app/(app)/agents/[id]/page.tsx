@@ -34,7 +34,7 @@ export default async function EditAgentPage({
   });
   if (!agent) notFound();
 
-  const [versions, docs, agents] = await Promise.all([
+  const [versions, docs, agents, customVoices] = await Promise.all([
     tab === "versions"
       ? db.agentVersion.findMany({
           where: { agentId: agent.id, workspaceId: ctx.workspaceId },
@@ -54,6 +54,10 @@ export default async function EditAgentPage({
           select: { id: true, name: true },
         })
       : Promise.resolve([]),
+    db.customVoice.findMany({
+      where: { workspaceId: ctx.workspaceId },
+      select: { id: true, name: true, status: true },
+    }),
   ]);
 
   return (
@@ -89,7 +93,7 @@ export default async function EditAgentPage({
       </nav>
 
       {tab === "general" || tab === "voice" || tab === "llm" ? (
-        <AgentForm mode="edit" agent={agent} section={tab} />
+        <AgentForm mode="edit" agent={agent} section={tab} customVoices={customVoices} />
       ) : tab === "knowledge" ? (
         <KnowledgeManager docs={docs} agents={agents} fixedAgentId={agent.id} />
       ) : tab === "tools" ? (

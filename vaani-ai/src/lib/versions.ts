@@ -5,6 +5,7 @@ export type AgentSnapshot = {
   greeting: string;
   config: {
     voiceId: string;
+    customVoiceId: string | null;
     llmModel: string;
     languageMode: string;
     fixedLanguage: string | null;
@@ -19,6 +20,7 @@ export function snapshotAgent(agent: {
   systemPrompt: string;
   greeting: string;
   voiceId: string;
+  customVoiceId: string | null;
   llmModel: string;
   languageMode: string;
   fixedLanguage: string | null;
@@ -31,6 +33,7 @@ export function snapshotAgent(agent: {
     greeting: agent.greeting,
     config: {
       voiceId: agent.voiceId,
+      customVoiceId: agent.customVoiceId,
       llmModel: agent.llmModel,
       languageMode: agent.languageMode,
       fixedLanguage: agent.fixedLanguage,

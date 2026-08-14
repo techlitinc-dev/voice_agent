@@ -61,6 +61,7 @@ model Workspace {
 
   memberships          Membership[]
   agents               Agent[]
+  customVoices         CustomVoice[]
   agentVersions        AgentVersion[]
   knowledgeDocuments   KnowledgeDocument[]
   marketplaceTemplates MarketplaceTemplate[] // templates authored BY this workspace
@@ -311,6 +312,7 @@ model Agent {
   languageMode            String      @default("auto") // auto | fixed | caller-select
   fixedLanguage           String? // e.g. "hi", "en-IN"
   voiceId                 String      @default("anushka") // Sarvam Bulbul speaker
+  customVoiceId           String? // cloned brand voice (CustomVoice) — overrides voiceId when set
   llmModel                String      @default("meta-llama/llama-3.1-70b-instruct")
   maxCallSeconds          Int         @default(600)
   conversationConfig Json? // {allowBargeIn, vadSensitivity, silenceTimeoutSec, fillerPhrases[], speakingPace, voiceMap{lang:voiceId}}
@@ -323,6 +325,7 @@ model Agent {
   updatedAt               DateTime    @updatedAt
 
   workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  customVoice        CustomVoice?        @relation(fields: [customVoiceId], references: [id], onDelete: SetNull)
   versions           AgentVersion[]
   knowledgeDocuments KnowledgeDocument[]
   toolConfigs        AgentToolConfig[]
@@ -330,6 +333,32 @@ model Agent {
   campaigns          Campaign[]
   calls              Call[]
 
+  @@index([workspaceId])
+}
+
+model CustomVoice {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  name          String   // "Brand Voice - Hindi Female"
+  provider      String   @default("elevenlabs") // "elevenlabs" | "playht" | "sarvam"
+  language      String   @default("hi")
+
+  sampleKey     String?  // MinIO key of uploaded sample audio (30s+)
+  previewKey    String?  // MinIO key of generated preview
+
+  // Provider-side reference
+  clonedVoiceId String?  // provider's voice ID (e.g. ElevenLabs voice_id)
+
+  status        String   @default("PENDING") // PENDING | TRAINING | READY | FAILED
+  error         String?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agents    Agent[]
+
+  @@unique([workspaceId, name])
   @@index([workspaceId])
 }
 

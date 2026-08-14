@@ -107,6 +107,25 @@ describe("buildAgentWorkflow — structure", () => {
     expect((agent.data.llm as { fallbacks: string[] }).fallbacks).toContain("google/gemini-flash-1.5");
   });
 
+  it("cloned brand voice overrides the stock TTS hint (docs/new-features/03)", () => {
+    const def = buildAgentWorkflow(
+      spec({
+        voiceId: "anushka",
+        customVoice: { provider: "elevenlabs", clonedVoiceId: "el-abc123", language: "hi" },
+      }),
+    );
+    const agent = def.nodes.find((n) => n.id === "agent-1")!;
+    const tts = agent.data.tts as { provider: string; voice_id: string; language_code: string };
+    expect(tts.provider).toBe("elevenlabs");
+    expect(tts.voice_id).toBe("el-abc123");
+    expect(tts.language_code).toBe("hi");
+
+    const stock = buildAgentWorkflow(spec({ voiceId: "anushka", customVoice: null }));
+    const stockTts = stock.nodes.find((n) => n.id === "agent-1")!.data.tts as { provider: string; model: string; voice_id: string };
+    expect(stockTts.provider).toBe("sarvam");
+    expect(stockTts.voice_id).toBe("anushka");
+  });
+
   it("barge-in control maps to allow_interrupt", () => {
     const off = buildAgentWorkflow(spec({ controls: { ...DEFAULT_CONTROLS, allowBargeIn: false } }));
     expect(off.nodes.find((n) => n.id === "agent-1")!.data.allow_interrupt).toBe(false);

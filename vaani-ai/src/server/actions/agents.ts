@@ -44,6 +44,7 @@ const agentSchema = z.object({
   languageMode: z.enum(["auto", "fixed", "caller-select"]),
   fixedLanguage: z.string().max(10).optional(),
   voiceId: z.string().min(1).max(40),
+  customVoiceId: z.string().max(40).nullable().optional(),
   llmModel: z.string().min(3).max(120),
   maxCallSeconds: z.coerce.number().int().min(60).max(3600),
   kbGuardrail: z.coerce.boolean().default(false),
@@ -69,8 +70,36 @@ async function assertAgentQuota(workspaceId: string): Promise<string | null> {
 async function loadAgent(workspaceId: string, agentId: string) {
   return db.agent.findFirst({
     where: { id: agentId, workspaceId },
-    include: { toolConfigs: { where: { enabled: true } } },
+    include: {
+      toolConfigs: { where: { enabled: true } },
+      customVoice: { select: { provider: true, clonedVoiceId: true, language: true, status: true } },
+    },
   });
+}
+
+/** Resolve the cloned brand voice hint for a workflow, if the agent has one READY. */
+async function customVoiceHint(
+  agent: { workspaceId: string; customVoiceId: string | null },
+): Promise<{ provider: string; clonedVoiceId: string; language: string } | null> {
+  if (!agent.customVoiceId) return null;
+  const voice = await db.customVoice.findFirst({
+    where: { id: agent.customVoiceId, workspaceId: agent.workspaceId, status: "READY", clonedVoiceId: { not: null } },
+    select: { provider: true, clonedVoiceId: true, language: true },
+  });
+  return voice?.clonedVoiceId ? { provider: voice.provider, clonedVoiceId: voice.clonedVoiceId, language: voice.language } : null;
+}
+
+/** Guard: a customVoiceId from the form must belong to this workspace. */
+async function assertCustomVoiceScoped(
+  workspaceId: string,
+  customVoiceId: string | null,
+): Promise<boolean> {
+  if (!customVoiceId) return true;
+  const voice = await db.customVoice.findFirst({
+    where: { id: customVoiceId, workspaceId },
+    select: { id: true },
+  });
+  return Boolean(voice);
 }
 
 function controlsOf(agent: { conversationConfig: unknown }): ConversationControls {
@@ -86,6 +115,7 @@ function workflowFor(input: {
   languageMode: string;
   fixedLanguage: string | null;
   voiceId: string;
+  customVoice?: { provider: string; clonedVoiceId: string; language: string } | null;
   llmModel: string;
   maxCallSeconds: number;
   kbGuardrail: boolean;
@@ -101,6 +131,7 @@ function workflowFor(input: {
     languageMode: input.languageMode as "auto" | "fixed" | "caller-select",
     fixedLanguage: input.fixedLanguage,
     voiceId: input.voiceId,
+    customVoice: input.customVoice,
     llmModel: input.llmModel,
     llmFallbacks: llmFallbackChain(input.llmModel),
     maxCallSeconds: Math.min(1200, input.maxCallSeconds), // Dograh cap
@@ -148,6 +179,10 @@ export async function createAgentAction(input: unknown): Promise<ActionResult> {
     if (quotaError) return { ok: false, error: quotaError };
 
     const { kbGuardrail, conversationConfig, ...fields } = parsed.data;
+    // empty string from an unselected <select> → null
+    if (fields.customVoiceId === "") fields.customVoiceId = null;
+    const voiceOk = await assertCustomVoiceScoped(ctx.workspaceId, fields.customVoiceId ?? null);
+    if (!voiceOk) return { ok: false, error: "That custom voice does not belong to this workspace." };
     const agent = await db.agent.create({
       data: {
         ...fields,
@@ -216,6 +251,10 @@ export async function updateAgentAction(agentId: string, input: unknown): Promis
     if (!parsed.success) return { ok: false, error: "Please check the form fields." };
 
     const { kbGuardrail, conversationConfig, ...fields } = parsed.data;
+    // empty string from an unselected <select> → null
+    if (fields.customVoiceId === "") fields.customVoiceId = null;
+    const voiceOk = await assertCustomVoiceScoped(ctx.workspaceId, fields.customVoiceId ?? null);
+    if (!voiceOk) return { ok: false, error: "That custom voice does not belong to this workspace." };
     // Tenant scope: the WHERE includes workspaceId — an id from the URL is not enough.
     const updated = await db.agent.updateMany({
       where: { id: agentId, workspaceId: ctx.workspaceId },
@@ -257,6 +296,7 @@ export async function cloneAgentAction(agentId: string): Promise<ActionResult> {
         languageMode: agent.languageMode,
         fixedLanguage: agent.fixedLanguage,
         voiceId: agent.voiceId,
+        customVoiceId: agent.customVoiceId,
         llmModel: agent.llmModel,
         maxCallSeconds: agent.maxCallSeconds,
         recordingDisclosureText: agent.recordingDisclosureText,
@@ -314,6 +354,7 @@ export async function publishAgentAction(agentId: string, label?: string): Promi
     const definition = workflowFor({
       ...agent,
       kbGuardrail,
+      customVoice: await customVoiceHint(agent),
       tools: agent.toolConfigs,
       businessName: workspace.name,
     });
@@ -388,6 +429,10 @@ export async function rollbackAgentAction(agentId: string, versionId: string): P
     const workspace = await db.workspace.findUniqueOrThrow({ where: { id: ctx.workspaceId } });
     const cfg = (version.config ?? {}) as Record<string, unknown>;
     const tools = Array.isArray(cfg.tools) ? (cfg.tools as { tool: string; config: unknown }[]) : [];
+    const customVoiceId = (cfg.customVoiceId as string | null) ?? null;
+    const customVoice = customVoiceId
+      ? await customVoiceHint({ workspaceId: ctx.workspaceId, customVoiceId })
+      : null;
 
     const definition = workflowFor({
       name: `rollback-v${version.version}`,
@@ -396,6 +441,7 @@ export async function rollbackAgentAction(agentId: string, versionId: string): P
       languageMode: String(cfg.languageMode ?? "auto"),
       fixedLanguage: (cfg.fixedLanguage as string | null) ?? null,
       voiceId: String(cfg.voiceId ?? "anushka"),
+      customVoice,
       llmModel: String(cfg.llmModel ?? "meta-llama/llama-3.1-70b-instruct"),
       maxCallSeconds: Number(cfg.maxCallSeconds ?? 600),
       kbGuardrail: cfg.kbGuardrail === true,
@@ -430,6 +476,7 @@ export async function rollbackAgentAction(agentId: string, versionId: string): P
           systemPrompt: version.systemPrompt,
           greeting: version.greeting,
           voiceId: String(cfg.voiceId ?? "anushka"),
+          customVoiceId,
           llmModel: String(cfg.llmModel ?? "meta-llama/llama-3.1-70b-instruct"),
           languageMode: String(cfg.languageMode ?? "auto"),
           fixedLanguage: (cfg.fixedLanguage as string | null) ?? null,
@@ -482,6 +529,10 @@ export async function createAbVariantAction(
     const workspace = await db.workspace.findUniqueOrThrow({ where: { id: ctx.workspaceId } });
     const cfg = (source.config ?? {}) as Record<string, unknown>;
     const tools = Array.isArray(cfg.tools) ? (cfg.tools as { tool: string; config: unknown }[]) : [];
+    const customVoiceId = (cfg.customVoiceId as string | null) ?? null;
+    const customVoice = customVoiceId
+      ? await customVoiceHint({ workspaceId: ctx.workspaceId, customVoiceId })
+      : null;
 
     const systemPrompt = parsed.data.systemPrompt ?? source.systemPrompt;
     const greeting = parsed.data.greeting ?? source.greeting;
@@ -491,6 +542,7 @@ export async function createAbVariantAction(
       languageMode: String(cfg.languageMode ?? "auto"),
       fixedLanguage: (cfg.fixedLanguage as string | null) ?? null,
       voiceId: String(cfg.voiceId ?? "anushka"),
+      customVoice,
       llmModel: String(cfg.llmModel ?? "meta-llama/llama-3.1-70b-instruct"),
       maxCallSeconds: Number(cfg.maxCallSeconds ?? 600),
       kbGuardrail: cfg.kbGuardrail === true,

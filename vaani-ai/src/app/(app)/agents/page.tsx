@@ -24,6 +24,7 @@ export default async function AgentsPage() {
   const agents = await db.agent.findMany({
     where: { workspaceId: ctx.workspaceId, NOT: { status: "ARCHIVED" } },
     orderBy: { updatedAt: "desc" },
+    include: { customVoice: { select: { name: true, status: true } } },
   });
 
   async function fromTemplate(formData: FormData) {
@@ -58,7 +59,7 @@ export default async function AgentsPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-1 text-sm text-muted-foreground">
-                  <p>Voice: {a.voiceId} · Lang: {a.languageMode}</p>
+                  <p>Voice: {a.customVoice?.name ?? a.voiceId} · Lang: {a.languageMode}</p>
                   <p className="truncate">{a.llmModel}</p>
                   <p>v{a.version}</p>
                 </CardContent>

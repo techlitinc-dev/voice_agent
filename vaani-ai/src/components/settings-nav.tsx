@@ -6,6 +6,7 @@ const LINKS = [
   { href: "/settings/api-keys", label: "API keys" },
   { href: "/settings/sessions", label: "Sessions" },
   { href: "/settings/audit-log", label: "Audit log" },
+  { href: "/settings/voices", label: "Custom voices" },
 ];
 
 export function SettingsNav() {

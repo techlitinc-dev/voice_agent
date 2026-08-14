@@ -34,6 +34,9 @@ export type WorkflowSpec = {
   languageMode: "auto" | "fixed" | "caller-select";
   fixedLanguage?: string | null;
   voiceId: string;
+  /** Cloned brand voice (docs/new-features/03) — when set, Dograh TTS uses the
+   *  provider's cloned voice instead of the Sarvam Bulbul stock voice. */
+  customVoice?: { provider: string; clonedVoiceId: string; language: string } | null;
   llmModel: string;
   llmFallbacks?: string[];
   maxCallSeconds: number; // Dograh caps at 1200 — caller clamps
@@ -123,6 +126,27 @@ function sttHint(spec: WorkflowSpec): Record<string, unknown> {
 }
 
 function ttsHint(spec: WorkflowSpec): Record<string, unknown> {
+  // Cloned brand voice (docs/new-features/03): route TTS to the provider's
+  // cloned voice id. Sarvam clones use Bulbul v3 with the cloned id as voice.
+  if (spec.customVoice?.clonedVoiceId) {
+    const cv = spec.customVoice;
+    if (cv.provider === "sarvam") {
+      return {
+        provider: "sarvam",
+        model: "bulbul:v3",
+        voice_id: cv.clonedVoiceId,
+        pace: spec.controls.speakingPace ?? "normal",
+        voice_map: spec.controls.voiceMap ?? {},
+      };
+    }
+    return {
+      provider: cv.provider, // elevenlabs | playht
+      voice_id: cv.clonedVoiceId,
+      language_code: cv.language,
+      pace: spec.controls.speakingPace ?? "normal",
+      voice_map: spec.controls.voiceMap ?? {},
+    };
+  }
   return {
     provider: "sarvam",
     model: "bulbul:v3",

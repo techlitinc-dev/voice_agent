@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { Agent } from "@prisma/client";
 import { createAgentAction, updateAgentAction } from "@/server/actions/agents";
 import { Button } from "@/components/ui/button";
@@ -27,16 +28,22 @@ export function AgentForm({
   mode,
   agent,
   section = "general",
+  customVoices = [],
 }: {
   mode: "create" | "edit";
   agent?: Agent;
   section?: "general" | "voice" | "llm";
+  customVoices?: { id: string; name: string; status: string }[];
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const c = controlsFrom(agent);
+  const [voiceMode, setVoiceMode] = useState<"stock" | "custom">(
+    agent?.customVoiceId ? "custom" : "stock",
+  );
+  const readyVoices = customVoices.filter((v) => v.status === "READY");
 
   function formData(e: React.FormEvent<HTMLFormElement>) {
     const f = new FormData(e.currentTarget);
@@ -52,6 +59,7 @@ export function AgentForm({
       languageMode: f.get("languageMode"),
       fixedLanguage: f.get("fixedLanguage") || undefined,
       voiceId: f.get("voiceId"),
+      customVoiceId: voiceMode === "custom" ? f.get("customVoiceId") || null : null,
       llmModel: f.get("llmModel"),
       maxCallSeconds: f.get("maxCallSeconds"),
       kbGuardrail: f.get("kbGuardrail") === "on",
@@ -177,6 +185,37 @@ export function AgentForm({
                 ))}
               </select>
             </label>
+            <div className="space-y-2 rounded-md border border-border p-3" data-testid="agent-custom-voice-block">
+              <p className="text-sm font-medium">Voice type</p>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="radio" name="voiceMode" value="stock" checked={voiceMode === "stock"}
+                  onChange={() => setVoiceMode("stock")} className="h-4 w-4" data-testid="agent-voice-mode-stock" />
+                Stock voice (Sarvam)
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="radio" name="voiceMode" value="custom" checked={voiceMode === "custom"}
+                  onChange={() => setVoiceMode("custom")} className="h-4 w-4" data-testid="agent-voice-mode-custom"
+                  disabled={readyVoices.length === 0} />
+                Custom cloned voice
+              </label>
+              {voiceMode === "custom" && (
+                <label className="block space-y-1">
+                  <span className="text-sm text-muted-foreground">Cloned voice</span>
+                  <select name="customVoiceId" defaultValue={agent?.customVoiceId ?? ""}
+                    data-testid="agent-custom-voice-select"
+                    className="h-9 w-full rounded-md border border-border bg-card px-3 text-sm">
+                    <option value="">— choose a cloned voice —</option>
+                    {readyVoices.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                  </select>
+                </label>
+              )}
+              {readyVoices.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  No ready cloned voices.{" "}
+                  <Link href="/settings/voices" className="text-primary hover:underline">Clone one in Settings →</Link>
+                </p>
+              )}
+            </div>
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
                 Per-language voice mapping — when auto-detect hears a language, switch to this voice

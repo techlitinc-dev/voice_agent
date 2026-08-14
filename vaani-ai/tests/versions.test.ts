@@ -7,6 +7,7 @@ describe("snapshotAgent", () => {
       systemPrompt: "sp",
       greeting: "g",
       voiceId: "anushka",
+      customVoiceId: null,
       llmModel: "m",
       languageMode: "auto",
       fixedLanguage: null,
