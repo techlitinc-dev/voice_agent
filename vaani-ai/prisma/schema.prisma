@@ -983,6 +983,10 @@ model Call {
   piiRedacted          Boolean        @default(false) // transcript was PII-redacted (spec 11)
   recordingKey         String? // MinIO object key
   transcript           String? // full plain-text transcript (full-text-search ready)
+  // Sentiment & emotion analytics (docs/new-features/02): per-turn caller
+  // timeline + overall trend, computed by the post-call sentiment worker.
+  sentimentTimeline Json? // [{ ts: 0, score: 0.3, label: "positive" }, ...]
+  sentimentTrend    String? // "improving" | "stable" | "declining"
   costTelephonyPaise   Int            @default(0)
   costSttPaise         Int            @default(0)
   costLlmPaise         Int            @default(0)
@@ -1029,6 +1033,10 @@ model TranscriptEntry {
   text        String
   timestampMs Int      @default(0) // ms from call start
   createdAt   DateTime @default(now())
+  // Real-time call coaching / sentiment analytics (docs/new-features/02):
+  // per-turn caller emotion, set by the post-call sentiment worker.
+  sentiment      String?  // "positive" | "neutral" | "negative" | "angry" | "frustrated" | "joyful"
+  sentimentScore Float?   // -1.0 (very negative) to 1.0 (very positive)
 
   call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
 

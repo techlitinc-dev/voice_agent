@@ -18,9 +18,11 @@ import {
   getCallsTimeSeries,
   getCsat,
   getKpiWithTrend,
+  getSentimentTrend,
 } from "@/lib/dashboard/queries";
 import { LiveTiles } from "./live-tiles";
 import { CallsOverTime, RevenueVsCost, CallsByAgent, CallsByCampaign, CallsBySource } from "./charts";
+import { SentimentTrend } from "@/components/sentiment-trend";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Dashboard — Vaani AI" };
@@ -124,7 +126,7 @@ export default async function DashboardPage({
   const current = getDateRange(range);
   const previous = previousRange(current);
 
-  const [kpis, csat, timeSeries, byAgent, byCampaign, bySource, alerts] = await Promise.all([
+  const [kpis, csat, timeSeries, byAgent, byCampaign, bySource, alerts, sentimentTrend] = await Promise.all([
     getKpiWithTrend(ctx.workspaceId, current, previous),
     getCsat(ctx.workspaceId, current),
     getCallsTimeSeries(ctx.workspaceId, current, "day"),
@@ -132,6 +134,7 @@ export default async function DashboardPage({
     getCallsByCampaign(ctx.workspaceId, current),
     getCallsBySource(ctx.workspaceId, current),
     getAlerts(ctx.workspaceId),
+    getSentimentTrend(ctx.workspaceId, current),
   ]);
 
   return (
@@ -186,7 +189,10 @@ export default async function DashboardPage({
           <CallsBySource data={bySource} />
         </div>
 
-        <AlertsPanel alerts={alerts} />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <SentimentTrend data={sentimentTrend} />
+          <AlertsPanel alerts={alerts} />
+        </div>
       </div>
     </main>
   );

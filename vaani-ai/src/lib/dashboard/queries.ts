@@ -4,6 +4,7 @@
  * Raw SQL uses quoted PascalCase table names (no @@map in the Prisma schema).
  */
 import { db } from "../db";
+import { Prisma } from "@prisma/client";
 import { type DateRange, marginPercent, pctChange, sumBilledPaise, sumWholesalePaise, computeAsr } from "../analytics";
 import { formatINR } from "../money";
 
@@ -82,6 +83,47 @@ export async function getCsat(workspaceId: string, range: DateRange): Promise<{ 
   if (scored.length === 0) return { value: 0, scored: 0 };
   const avg = scored.reduce((a, s) => a + (s.totalScore / s.maxScore) * 100, 0) / scored.length;
   return { value: Math.round(avg), scored: scored.length };
+}
+
+export type SentimentTrendRow = {
+  date: string; // YYYY-MM-DD
+  avgScore: number; // -1..1, 0 when no scored calls
+  label: string; // "positive" | "neutral" | "negative"
+  scoredCalls: number;
+};
+
+/**
+ * Daily workspace sentiment trend (docs/new-features/02 §3.3): average caller
+ * sentiment score per day, from the per-call sentimentTimeline arrays.
+ */
+export async function getSentimentTrend(workspaceId: string, range: DateRange): Promise<SentimentTrendRow[]> {
+  const calls = await db.call.findMany({
+    where: {
+      workspaceId,
+      startedAt: { gte: range.start, lte: range.end },
+      sentimentTimeline: { not: Prisma.DbNull },
+    },
+    select: { startedAt: true, sentimentTimeline: true },
+    orderBy: { startedAt: "asc" },
+  });
+
+  const byDay = new Map<string, number[]>();
+  for (const c of calls) {
+    if (!Array.isArray(c.sentimentTimeline) || c.sentimentTimeline.length === 0) continue;
+    const day = c.startedAt.toISOString().slice(0, 10);
+    const scores = c.sentimentTimeline
+      .map((p) => (typeof p === "object" && p !== null && typeof (p as { score?: unknown }).score === "number" ? (p as { score: number }).score : null))
+      .filter((s): s is number => s !== null);
+    if (scores.length === 0) continue;
+    const avg = scores.reduce((a, s) => a + s, 0) / scores.length;
+    byDay.set(day, [...(byDay.get(day) ?? []), avg]);
+  }
+
+  return [...byDay.entries()].map(([date, avgs]) => {
+    const avg = avgs.reduce((a, s) => a + s, 0) / avgs.length;
+    const label = avg > 0.2 ? "positive" : avg < -0.2 ? "negative" : "neutral";
+    return { date, avgScore: Math.round(avg * 100) / 100, label, scoredCalls: avgs.length };
+  });
 }
 
 export type TimeSeriesRow = {

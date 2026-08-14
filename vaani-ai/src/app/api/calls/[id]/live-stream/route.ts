@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
+import { classifyEmotion } from "@/lib/sentiment";
 
 const encoder = new TextEncoder();
 const POLL_MS = 2000;
@@ -43,6 +44,9 @@ export async function GET(
   // Seed the cursor from the call start so a supervisor joining mid-call gets
   // the full transcript on the initial poll, not just new entries.
   let lastTs = call.startedAt;
+  // Real-time frustration detection (docs/new-features/02 §2.2): classify each
+  // new CALLER turn once, and alert when sentiment drops below -0.6.
+  const classifiedIds = new Set<string>();
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -66,6 +70,29 @@ export async function GET(
             controller.enqueue(sse("transcript", entry));
           }
           if (entries.length > 0) lastTs = new Date();
+
+          // Live frustration detection: classify new CALLER turns, persist the
+          // label, and alert supervisors when the score is strongly negative.
+          for (const entry of entries) {
+            if (entry.speaker !== "CALLER" || classifiedIds.has(entry.id)) continue;
+            const r = await classifyEmotion(entry.text);
+            classifiedIds.add(entry.id);
+            await db.transcriptEntry
+              .update({ where: { id: entry.id }, data: { sentiment: r.label, sentimentScore: r.score } })
+              .catch(() => {});
+            if (r.score < -0.6) {
+              controller.enqueue(
+                sse("alert", {
+                  callId,
+                  title: "Caller frustration detected",
+                  body: `Negative sentiment on call ${callId}`,
+                  link: `/live/${callId}`,
+                  label: r.label,
+                  score: r.score,
+                })
+              );
+            }
+          }
 
           const updated = await db.liveCallState.findUnique({ where: { callId } });
           const liveStatus = updated?.status ?? call.status;

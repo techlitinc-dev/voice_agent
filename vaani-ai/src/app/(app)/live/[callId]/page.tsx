@@ -41,6 +41,7 @@ export default function LiveCallPage({ params }: { params: { callId: string } })
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ended, setEnded] = useState(false);
+  const [alert, setAlert] = useState<{ title: string; body: string; label: string; score: number } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const streamOpen = useRef(true);
 
@@ -72,6 +73,13 @@ export default function LiveCallPage({ params }: { params: { callId: string } })
       setEnded(true);
       streamOpen.current = false;
       es.close();
+    });
+    es.addEventListener("alert", (e) => {
+      try {
+        setAlert(JSON.parse((e as MessageEvent).data));
+      } catch {
+        /* ignore */
+      }
     });
     es.onerror = () => {
       // EventSource auto-reconnects; stop trying once the call has ended.
@@ -147,6 +155,17 @@ export default function LiveCallPage({ params }: { params: { callId: string } })
 
       {error && (
         <p className="text-sm text-red-500" data-testid="live-error">{error}</p>
+      )}
+
+      {alert && (
+        <div data-testid="live-frustration-alert"
+          className="flex items-start justify-between gap-3 rounded-md border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-600">
+          <div>
+            <p className="font-semibold">{alert.title}</p>
+            <p className="text-xs">{alert.body} · {alert.label} ({alert.score.toFixed(2)})</p>
+          </div>
+          <button className="text-xs underline" onClick={() => setAlert(null)}>Dismiss</button>
+        </div>
       )}
 
       <ScrollArea className="min-h-0 flex-1 rounded-md border" ref={scrollRef}>

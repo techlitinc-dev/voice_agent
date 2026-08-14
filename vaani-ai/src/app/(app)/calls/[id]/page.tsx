@@ -5,6 +5,8 @@ import { requireWorkspace } from "@/lib/auth";
 import { recordingUrl } from "@/lib/storage";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatINR } from "@/lib/money";
+import { SentimentTimeline } from "@/components/sentiment-chart";
+import { SentimentTranscript } from "@/components/sentiment-transcript";
 
 export default async function CallDetailPage({ params }: { params: { id: string } }) {
   let ctx;
@@ -17,6 +19,7 @@ export default async function CallDetailPage({ params }: { params: { id: string 
       campaign: { select: { name: true } },
       events: { orderBy: { createdAt: "asc" }, take: 100 },
       qaScores: { orderBy: { createdAt: "desc" }, take: 1 },
+      transcriptEntries: { orderBy: { timestampMs: "asc" } },
     },
   });
   if (!call) notFound();
@@ -41,6 +44,18 @@ export default async function CallDetailPage({ params }: { params: { id: string 
     call.extractedEntities && typeof call.extractedEntities === "object" && !Array.isArray(call.extractedEntities)
       ? (call.extractedEntities as Record<string, unknown>)
       : null;
+
+  const timeline =
+    Array.isArray(call.sentimentTimeline)
+      ? call.sentimentTimeline.filter(
+          (p): p is { ts: number; score: number; label: string } =>
+            typeof p === "object" &&
+            p !== null &&
+            typeof (p as { ts?: unknown }).ts === "number" &&
+            typeof (p as { score?: unknown }).score === "number" &&
+            typeof (p as { label?: unknown }).label === "string"
+        )
+      : [];
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -91,7 +106,7 @@ export default async function CallDetailPage({ params }: { params: { id: string 
             {call.campaign && <p>Campaign: {call.campaign.name}</p>}
             <p>Duration: {call.durationSec}s</p>
             <p>Disposition / outcome: {call.outcome ?? "—"}</p>
-            <p>Sentiment: {call.sentiment ?? "—"}</p>
+            <p>Sentiment: {call.sentiment ?? "—"}{call.sentimentTrend ? ` (${call.sentimentTrend})` : ""}</p>
             {call.interestScore && <p>Interest: {call.interestScore} — {call.interestReason ?? ""}</p>}
             <p>Dead air: {call.deadAirSeconds}s · Script adherence: {call.scriptAdherenceScore ?? "—"}</p>
             <p className="text-muted-foreground">{call.createdAt.toLocaleString("en-IN")}</p>
@@ -112,9 +127,23 @@ export default async function CallDetailPage({ params }: { params: { id: string 
         </Card>
       </div>
 
+      {timeline.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Sentiment timeline
+              {call.sentimentTrend ? <span className="ml-2 text-sm font-normal text-muted-foreground">({call.sentimentTrend})</span> : null}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <SentimentTimeline timeline={timeline} />
+          </CardContent>
+        </Card>
+      )}
+
       {call.summary && (
         <Card>
           <CardHeader><CardTitle>AI summary</CardTitle></CardHeader>
+
           <CardContent className="text-sm">{call.summary}</CardContent>
         </Card>
       )}
@@ -175,11 +204,16 @@ export default async function CallDetailPage({ params }: { params: { id: string 
       <Card>
         <CardHeader><CardTitle>Transcript{call.piiRedacted ? " (PII redacted)" : ""}</CardTitle></CardHeader>
         <CardContent>
-          {call.transcript ? (
-            <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed" data-testid="call-transcript">{call.transcript}</pre>
-          ) : (
-            <p className="text-sm text-muted-foreground">No transcript captured (or removed by retention/erasure).</p>
-          )}
+          <SentimentTranscript
+            entries={call.transcriptEntries.map((t) => ({
+              id: t.id,
+              speaker: t.speaker,
+              text: t.text,
+              timestampMs: t.timestampMs,
+              sentiment: t.sentiment ?? null,
+              sentimentScore: t.sentimentScore ?? null,
+            }))}
+          />
         </CardContent>
       </Card>
 
