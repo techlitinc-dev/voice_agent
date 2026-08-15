@@ -83,7 +83,7 @@ export async function resolveWorkflowForAgent(
     where: { agentId: agent.id, workspaceId, status: "PUBLISHED" },
     select: { id: true, isAbVariant: true, abTrafficPercent: true, dograhWorkflowId: true, dograhWorkflowUuid: true },
   });
-  const resolved = resolveAgentForCall({ agentId: agent.id, callerPhone, publishedVersions: versions });
+  const resolved = resolveAgentForCall({ agentId: agent.id, callerPhone, publishedVersions: versions, pinnedVersionId: agent.pinnedVersionId ?? null });
   const wf = resolved ?? (agent.dograhWorkflowId
     ? { dograhWorkflowId: agent.dograhWorkflowId, dograhWorkflowUuid: agent.dograhWorkflowUuid, versionId: null as string | null }
     : null);

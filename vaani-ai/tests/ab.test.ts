@@ -43,6 +43,18 @@ describe("resolveServingVersion", () => {
     expect(variant).toBeGreaterThan(n * 0.35);
     expect(variant).toBeLessThan(n * 0.65);
   });
+
+  it("pinned version always serves, overriding the A/B split (AGENT-33)", () => {
+    for (let i = 0; i < 20; i++) {
+      expect(resolveServingVersion(pubs(50), "agent1", `+9199000000${i}`, "main")!.id).toBe("main");
+      expect(resolveServingVersion(pubs(50), "agent1", `+9199000000${i}`, "var")!.id).toBe("var");
+    }
+  });
+
+  it("a pin to an unpublished/archived version falls back to normal routing", () => {
+    // pinned id is not in the published set → split still applies
+    expect(resolveServingVersion(pubs(0), "agent1", "+919900000001", "gone")!.id).toBe("main");
+  });
 });
 
 describe("resolveAgentForCall", () => {

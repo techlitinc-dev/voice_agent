@@ -338,7 +338,10 @@ model Agent {
   voiceId                 String      @default("anushka") // Sarvam Bulbul speaker
   customVoiceId           String? // cloned brand voice (CustomVoice) — overrides voiceId when set
   llmModel                String      @default("meta-llama/llama-3.1-70b-instruct")
+  temperature             Float       @default(0.7) // LLM sampling temperature (0..1)
+  maxTokens               Int         @default(300) // LLM max output tokens
   maxCallSeconds          Int         @default(600)
+  pinnedVersionId         String? // if set, calls always use this AgentVersion (AGENT-33 pinning)
   conversationConfig Json? // {allowBargeIn, vadSensitivity, silenceTimeoutSec, fillerPhrases[], speakingPace, voiceMap{lang:voiceId}}
   recordingDisclosureText String? // overrides Workspace.recordingDisclosureText
   dograhWorkflowId        String? // set after publishing to Dograh (mirrors latest published AgentVersion)
@@ -350,6 +353,7 @@ model Agent {
 
   workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   customVoice        CustomVoice?        @relation(fields: [customVoiceId], references: [id], onDelete: SetNull)
+  pinnedVersion      AgentVersion?       @relation("PinnedVersion", fields: [pinnedVersionId], references: [id], onDelete: SetNull)
   conversations      Conversation[]      @relation("ConversationAgent")
   versions           AgentVersion[]
   knowledgeDocuments KnowledgeDocument[]
@@ -408,6 +412,7 @@ model AgentVersion {
   agent     Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   calls     Call[]    // back-relation for Call.agentVersionId (A/B attribution)
+  pinnedByAgents Agent[] @relation("PinnedVersion") // agents pinning this version (AGENT-33)
 
   @@unique([agentId, version])
   @@index([workspaceId])

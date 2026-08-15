@@ -9,6 +9,8 @@ describe("snapshotAgent", () => {
       voiceId: "anushka",
       customVoiceId: null,
       llmModel: "m",
+      temperature: 0.3,
+      maxTokens: 512,
       languageMode: "auto",
       fixedLanguage: null,
       maxCallSeconds: 600,
@@ -18,6 +20,8 @@ describe("snapshotAgent", () => {
     expect(snap.systemPrompt).toBe("sp");
     expect(snap.config.tools).toEqual([{ tool: "SMS", config: { messageTemplate: "x" } }]);
     expect(snap.config.voiceId).toBe("anushka");
+    expect(snap.config.temperature).toBe(0.3);
+    expect(snap.config.maxTokens).toBe(512);
   });
 });
 

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AgentVersion } from "@prisma/client";
-import { rollbackAgentAction, createAbVariantAction, removeAbVariantAction } from "@/server/actions/agents";
+import { rollbackAgentAction, createAbVariantAction, removeAbVariantAction, pinVersionAction, unpinVersionAction } from "@/server/actions/agents";
 import { publishTemplateAction } from "@/server/actions/marketplace";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,11 +20,13 @@ export function VersionsTab({
   agentName,
   versions,
   abComparison = null,
+  pinnedVersionId = null,
 }: {
   agentId: string;
   agentName: string;
   versions: AgentVersion[];
   abComparison?: import("@/lib/ab-test-stats").AbComparison | null;
+  pinnedVersionId?: string | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -68,9 +70,14 @@ export function VersionsTab({
               <tbody>
                 {versions.map((v) => (
                   <tr key={v.id} className="border-t border-border" data-testid={`version-row-${v.version}`}>
-                    <td className="py-2">
+                    <td>
                       v{v.version}
                       {v.isAbVariant ? " (A/B)" : ""}
+                      {v.id === pinnedVersionId && (
+                        <span className="ml-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary" data-testid="version-pinned-badge">
+                          pinned
+                        </span>
+                      )}
                       {v.label ? <span className="block text-xs text-muted-foreground">{v.label}</span> : null}
                     </td>
                     <td><span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_STYLE[v.status]}`}>{v.status}</span></td>
@@ -92,6 +99,21 @@ export function VersionsTab({
                           data-testid="ab-remove-btn"
                           onClick={() => run("End A/B test", () => removeAbVariantAction(agentId, v.id))}>
                           End A/B test
+                        </Button>
+                      )}
+                      {v.status === "PUBLISHED" && v.id !== pinnedVersionId && (
+                        <Button size="sm" variant="outline" disabled={busy !== null}
+                          data-testid={`version-pin-${v.version}`}
+                          title="Pin: this version serves 100% of calls (overrides A/B split)"
+                          onClick={() => run(`Pin v${v.version}`, () => pinVersionAction(agentId, v.id))}>
+                          Pin
+                        </Button>
+                      )}
+                      {v.id === pinnedVersionId && (
+                        <Button size="sm" variant="outline" disabled={busy !== null}
+                          data-testid="version-unpin-btn"
+                          onClick={() => run("Unpin", () => unpinVersionAction(agentId))}>
+                          Unpin
                         </Button>
                       )}
                     </td>

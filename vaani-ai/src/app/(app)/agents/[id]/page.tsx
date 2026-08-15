@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireWorkspace } from "@/lib/auth";
+import { checkFeatureGate } from "@/lib/feature-gates";
 import { AgentForm } from "../agent-form";
 import { VersionsTab } from "./versions-tab";
 import { getAbComparison } from "@/lib/ab-test-query";
@@ -35,7 +36,7 @@ export default async function EditAgentPage({
   });
   if (!agent) notFound();
 
-  const [versions, docs, agents, customVoices, abComparison] = await Promise.all([
+  const [versions, docs, agents, customVoices, abComparison, voicesGate] = await Promise.all([
     tab === "versions"
       ? db.agentVersion.findMany({
           where: { agentId: agent.id, workspaceId: ctx.workspaceId },
@@ -62,6 +63,7 @@ export default async function EditAgentPage({
     tab === "versions"
       ? getAbComparison(ctx.workspaceId, agent.id)
       : Promise.resolve(null),
+    checkFeatureGate(ctx.workspaceId, "premiumVoices").catch(() => ({ allowed: false } as { allowed: boolean })),
   ]);
 
   return (
@@ -97,13 +99,14 @@ export default async function EditAgentPage({
       </nav>
 
       {tab === "general" || tab === "voice" || tab === "llm" ? (
-        <AgentForm mode="edit" agent={agent} section={tab} customVoices={customVoices} />
+        <AgentForm mode="edit" agent={agent} section={tab} customVoices={customVoices}
+          premiumVoicesAllowed={voicesGate.allowed} />
       ) : tab === "knowledge" ? (
         <KnowledgeManager docs={docs} agents={agents} fixedAgentId={agent.id} />
       ) : tab === "tools" ? (
         <ToolsTab agentId={agent.id} toolConfigs={agent.toolConfigs} />
       ) : (
-        <VersionsTab agentId={agent.id} agentName={agent.name} versions={versions} abComparison={abComparison} />
+        <VersionsTab agentId={agent.id} agentName={agent.name} versions={versions} abComparison={abComparison} pinnedVersionId={agent.pinnedVersionId} />
       )}
     </div>
   );

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   publishAgentAction,
+  unpublishAgentAction,
   createTestRunAction,
   advancedEditorUrlAction,
   cloneAgentAction,
@@ -47,6 +48,18 @@ export function EditorActions({
         >
           {busy === "Publish" ? "Publishing…" : status === "PUBLISHED" ? "Publish new version" : "Publish"}
         </Button>
+        {status === "PUBLISHED" && (
+          <Button
+            size="sm" variant="outline" disabled={busy !== null}
+            data-testid="agent-unpublish-btn"
+            onClick={() => {
+              if (!window.confirm("Unpublish this agent? Its live version goes back to draft and calls stop routing to it.")) return;
+              run("Unpublish", () => unpublishAgentAction(agentId));
+            }}
+          >
+            Unpublish
+          </Button>
+        )}
         <Button
           size="sm" variant="outline" disabled={busy !== null || !published}
           data-testid="agent-test-call-btn"
@@ -71,6 +84,7 @@ export function EditorActions({
         </Button>
         <Button
           size="sm" variant="destructive" disabled={busy !== null}
+          data-testid="agent-archive-btn"
           onClick={() => run("Archive", async () => {
             const r = await archiveAgentAction(agentId);
             if (r.ok) router.push("/agents");

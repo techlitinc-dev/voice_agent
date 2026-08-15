@@ -29,11 +29,13 @@ export function AgentForm({
   agent,
   section = "general",
   customVoices = [],
+  premiumVoicesAllowed = true,
 }: {
   mode: "create" | "edit";
   agent?: Agent;
   section?: "general" | "voice" | "llm";
   customVoices?: { id: string; name: string; status: string }[];
+  premiumVoicesAllowed?: boolean;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +63,8 @@ export function AgentForm({
       voiceId: f.get("voiceId"),
       customVoiceId: voiceMode === "custom" ? f.get("customVoiceId") || null : null,
       llmModel: f.get("llmModel"),
+      temperature: f.get("temperature") ?? 0.7,
+      maxTokens: f.get("maxTokens") ?? 300,
       maxCallSeconds: f.get("maxCallSeconds"),
       kbGuardrail: f.get("kbGuardrail") === "on",
       template: agent?.template ?? undefined,
@@ -177,16 +181,31 @@ export function AgentForm({
             </label>
             <label className="block space-y-1">
               <span className="text-sm text-muted-foreground">Primary voice (Sarvam Bulbul v3)</span>
-              <select name="voiceId" defaultValue={agent?.voiceId ?? "anushka"}
-                data-testid="agent-voice-select"
-                className="h-9 w-full rounded-md border border-border bg-card px-3 text-sm">
-                {SARVAM_VOICES.map((v) => (
-                  <option key={v.id} value={v.id}>{v.id} ({v.gender})</option>
-                ))}
-              </select>
+              <div className="flex gap-2">
+                <select name="voiceId" defaultValue={agent?.voiceId ?? "anushka"}
+                  data-testid="agent-voice-select"
+                  className="h-9 flex-1 rounded-md border border-border bg-card px-3 text-sm">
+                  {SARVAM_VOICES.map((v) => (
+                    <option key={v.id} value={v.id}>{v.id} ({v.gender})</option>
+                  ))}
+                </select>
+                <Button type="button" variant="outline" size="sm" data-testid="agent-voice-preview"
+                  onClick={() => {
+                    const sel = document.querySelector<HTMLSelectElement>("[data-testid='agent-voice-select']");
+                    window.open(`/api/voices/stock/${sel?.value ?? "anushka"}/sample`, "_blank", "noopener");
+                  }}>
+                  Preview voice
+                </Button>
+              </div>
             </label>
             <div className="space-y-2 rounded-md border border-border p-3" data-testid="agent-custom-voice-block">
               <p className="text-sm font-medium">Voice type</p>
+              {!premiumVoicesAllowed && (
+                <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-400" data-testid="agent-voice-clone-gate">
+                  Custom voice cloning requires the Enterprise plan or the premium-voices add-on (₹5,000/mo per voice).
+                  <Link href="/settings/voices" className="ml-1 text-primary hover:underline">See Settings →</Link>
+                </p>
+              )}
               <label className="flex items-center gap-2 text-sm">
                 <input type="radio" name="voiceMode" value="stock" checked={voiceMode === "stock"}
                   onChange={() => setVoiceMode("stock")} className="h-4 w-4" data-testid="agent-voice-mode-stock" />
@@ -195,7 +214,7 @@ export function AgentForm({
               <label className="flex items-center gap-2 text-sm">
                 <input type="radio" name="voiceMode" value="custom" checked={voiceMode === "custom"}
                   onChange={() => setVoiceMode("custom")} className="h-4 w-4" data-testid="agent-voice-mode-custom"
-                  disabled={readyVoices.length === 0} />
+                  disabled={readyVoices.length === 0 || !premiumVoicesAllowed} />
                 Custom cloned voice
               </label>
               {voiceMode === "custom" && (
@@ -259,6 +278,18 @@ export function AgentForm({
               <p>· <code>:nitro</code> models when latency matters (&lt;800ms budget).</p>
               <p>· Premium models for complex sales conversations.</p>
               <p className="mt-1">Failover: if a provider rate-limits, the call falls back to Llama 3.1 70B → Gemini Flash → DeepSeek floor (configured in guide 04; the chain is passed per-agent on publish).</p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block space-y-1">
+                <span className="text-sm text-muted-foreground">Temperature (0–1, higher = more creative)</span>
+                <Input name="temperature" type="number" step="0.1" min={0} max={1}
+                  defaultValue={agent?.temperature ?? 0.7} data-testid="agent-temperature-input" />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-sm text-muted-foreground">Max output tokens</span>
+                <Input name="maxTokens" type="number" min={1} max={4096}
+                  defaultValue={agent?.maxTokens ?? 300} data-testid="agent-max-tokens-input" />
+              </label>
             </div>
           </div>
 

@@ -107,6 +107,17 @@ describe("buildAgentWorkflow — structure", () => {
     expect((agent.data.llm as { fallbacks: string[] }).fallbacks).toContain("google/gemini-flash-1.5");
   });
 
+  it("temperature/maxTokens are passed through to the LLM hint (AGENT-13)", () => {
+    const def = buildAgentWorkflow(spec({ temperature: 0.2, maxTokens: 512 }));
+    const agent = def.nodes.find((n) => n.id === "agent-1")!;
+    const llm = agent.data.llm as { temperature: number; max_tokens: number };
+    expect(llm.temperature).toBe(0.2);
+    expect(llm.max_tokens).toBe(512);
+    // defaults apply when omitted
+    const dflt = buildAgentWorkflow(spec());
+    expect((dflt.nodes.find((n) => n.id === "agent-1")!.data.llm as { temperature: number }).temperature).toBe(0.7);
+  });
+
   it("cloned brand voice overrides the stock TTS hint (docs/new-features/03)", () => {
     const def = buildAgentWorkflow(
       spec({

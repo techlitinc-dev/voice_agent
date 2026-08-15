@@ -14,6 +14,7 @@ import {
 } from "@/lib/workflow-builder";
 import { llmFallbackChain } from "@/lib/voices";
 import { nextVersionNumber, snapshotAgent, validateAbSplit } from "@/lib/versions";
+import { checkFeatureGate } from "@/lib/feature-gates";
 import {
   dograhCreateWorkflow,
   dograhUpdateWorkflow,
@@ -46,6 +47,8 @@ const agentSchema = z.object({
   voiceId: z.string().min(1).max(40),
   customVoiceId: z.string().max(40).nullable().optional(),
   llmModel: z.string().min(3).max(120),
+  temperature: z.coerce.number().min(0).max(1).default(0.7),
+  maxTokens: z.coerce.number().int().min(1).max(4096).default(300),
   maxCallSeconds: z.coerce.number().int().min(60).max(3600),
   kbGuardrail: z.coerce.boolean().default(false),
   conversationConfig: conversationConfigSchema.default(conversationConfigSchema.parse({})),
@@ -102,6 +105,21 @@ async function assertCustomVoiceScoped(
   return Boolean(voice);
 }
 
+/** AGENT-10 plan gate: using a cloned voice requires premiumVoices (Enterprise
+ *  plan or premium-voices add-on). Fail closed on gate-check error. */
+async function assertVoiceCloneGate(workspaceId: string, customVoiceId: string | null): Promise<string | null> {
+  if (!customVoiceId) return null;
+  try {
+    const gate = await checkFeatureGate(workspaceId, "premiumVoices");
+    if (!gate.allowed) {
+      return "Custom voice cloning requires the Enterprise plan or the premium-voices add-on (Settings → Custom voices).";
+    }
+  } catch {
+    return "Custom voice cloning requires the Enterprise plan or the premium-voices add-on (Settings → Custom voices).";
+  }
+  return null;
+}
+
 function controlsOf(agent: { conversationConfig: unknown }): ConversationControls {
   const parsed = conversationConfigSchema.safeParse(agent.conversationConfig ?? {});
   return parsed.success ? parsed.data : conversationConfigSchema.parse({});
@@ -117,6 +135,8 @@ function workflowFor(input: {
   voiceId: string;
   customVoice?: { provider: string; clonedVoiceId: string; language: string } | null;
   llmModel: string;
+  temperature?: number;
+  maxTokens?: number;
   maxCallSeconds: number;
   kbGuardrail: boolean;
   conversationConfig: unknown;
@@ -133,6 +153,8 @@ function workflowFor(input: {
     voiceId: input.voiceId,
     customVoice: input.customVoice,
     llmModel: input.llmModel,
+    temperature: input.temperature ?? 0.7,
+    maxTokens: input.maxTokens ?? 300,
     llmFallbacks: llmFallbackChain(input.llmModel),
     maxCallSeconds: Math.min(1200, input.maxCallSeconds), // Dograh cap
     controls: controlsOf({ conversationConfig: input.conversationConfig }),
@@ -183,6 +205,8 @@ export async function createAgentAction(input: unknown): Promise<ActionResult> {
     if (fields.customVoiceId === "") fields.customVoiceId = null;
     const voiceOk = await assertCustomVoiceScoped(ctx.workspaceId, fields.customVoiceId ?? null);
     if (!voiceOk) return { ok: false, error: "That custom voice does not belong to this workspace." };
+    const cloneGate = await assertVoiceCloneGate(ctx.workspaceId, fields.customVoiceId ?? null);
+    if (cloneGate) return { ok: false, error: cloneGate };
     const agent = await db.agent.create({
       data: {
         ...fields,
@@ -255,6 +279,8 @@ export async function updateAgentAction(agentId: string, input: unknown): Promis
     if (fields.customVoiceId === "") fields.customVoiceId = null;
     const voiceOk = await assertCustomVoiceScoped(ctx.workspaceId, fields.customVoiceId ?? null);
     if (!voiceOk) return { ok: false, error: "That custom voice does not belong to this workspace." };
+    const cloneGate = await assertVoiceCloneGate(ctx.workspaceId, fields.customVoiceId ?? null);
+    if (cloneGate) return { ok: false, error: cloneGate };
     // Tenant scope: the WHERE includes workspaceId — an id from the URL is not enough.
     const updated = await db.agent.updateMany({
       where: { id: agentId, workspaceId: ctx.workspaceId },
@@ -298,6 +324,8 @@ export async function cloneAgentAction(agentId: string): Promise<ActionResult> {
         voiceId: agent.voiceId,
         customVoiceId: agent.customVoiceId,
         llmModel: agent.llmModel,
+        temperature: agent.temperature,
+        maxTokens: agent.maxTokens,
         maxCallSeconds: agent.maxCallSeconds,
         recordingDisclosureText: agent.recordingDisclosureText,
         conversationConfig: (agent.conversationConfig ?? {}) as object,
@@ -336,6 +364,43 @@ export async function archiveAgentAction(agentId: string): Promise<ActionResult>
   }
 }
 
+/** AGENT-27 unpublish: take the LIVE agent offline. The latest PUBLISHED main
+ *  version flips to DRAFT and the Agent's status returns to DRAFT — a number
+ *  assignment stays but the workflow is no longer live. Publish later re-freezes
+ *  a new snapshot. */
+export async function unpublishAgentAction(agentId: string): Promise<ActionResult> {
+  try {
+    const ctx = await requirePermission("agents:write");
+    const agent = await db.agent.findFirst({
+      where: { id: agentId, workspaceId: ctx.workspaceId },
+      select: { id: true, status: true },
+    });
+    if (!agent) return { ok: false, error: "Agent not found." };
+    if (agent.status !== "PUBLISHED") return { ok: false, error: "Only a published agent can be unpublished." };
+
+    await db.$transaction([
+      // Draft the live main version (A/B variants get archived — no live traffic).
+      db.agentVersion.updateMany({
+        where: { agentId, workspaceId: ctx.workspaceId, status: "PUBLISHED" },
+        data: { status: "DRAFT" },
+      }),
+      db.agent.update({
+        where: { id: agentId },
+        data: { status: "DRAFT", pinnedVersionId: null },
+      }),
+    ]);
+    await audit({
+      workspaceId: ctx.workspaceId, userId: ctx.user.id,
+      action: "agent.unpublish", entity: "Agent", entityId: agentId,
+    });
+    revalidatePath("/agents");
+    revalidatePath(`/agents/${agentId}`);
+    return { ok: true };
+  } catch (e) {
+    return handleError(e);
+  }
+}
+
 // ---------- Version control: publish / rollback / A/B ----------
 
 /**
@@ -358,7 +423,6 @@ export async function publishAgentAction(agentId: string, label?: string): Promi
       tools: agent.toolConfigs,
       businessName: workspace.name,
     });
-
     const versions = await db.agentVersion.findMany({
       where: { agentId: agent.id, workspaceId: ctx.workspaceId },
       select: { version: true },
@@ -397,7 +461,7 @@ export async function publishAgentAction(agentId: string, label?: string): Promi
 
     await db.agent.update({
       where: { id: agent.id },
-      data: { status: "PUBLISHED", dograhWorkflowId: pushed.id, dograhWorkflowUuid: pushed.uuid },
+      data: { status: "PUBLISHED", dograhWorkflowId: pushed.id, dograhWorkflowUuid: pushed.uuid, pinnedVersionId: null },
     });
     await audit({
       workspaceId: ctx.workspaceId, userId: ctx.user.id,
@@ -443,6 +507,8 @@ export async function rollbackAgentAction(agentId: string, versionId: string): P
       voiceId: String(cfg.voiceId ?? "anushka"),
       customVoice,
       llmModel: String(cfg.llmModel ?? "meta-llama/llama-3.1-70b-instruct"),
+      temperature: typeof cfg.temperature === "number" ? cfg.temperature : 0.7,
+      maxTokens: typeof cfg.maxTokens === "number" ? cfg.maxTokens : 300,
       maxCallSeconds: Number(cfg.maxCallSeconds ?? 600),
       kbGuardrail: cfg.kbGuardrail === true,
       conversationConfig: cfg.conversationConfig ?? {},
@@ -473,11 +539,14 @@ export async function rollbackAgentAction(agentId: string, versionId: string): P
           status: "PUBLISHED",
           dograhWorkflowId: pushed.id,
           dograhWorkflowUuid: uuid,
+          pinnedVersionId: null,
           systemPrompt: version.systemPrompt,
           greeting: version.greeting,
           voiceId: String(cfg.voiceId ?? "anushka"),
           customVoiceId,
           llmModel: String(cfg.llmModel ?? "meta-llama/llama-3.1-70b-instruct"),
+          temperature: typeof cfg.temperature === "number" ? cfg.temperature : 0.7,
+          maxTokens: typeof cfg.maxTokens === "number" ? cfg.maxTokens : 300,
           languageMode: String(cfg.languageMode ?? "auto"),
           fixedLanguage: (cfg.fixedLanguage as string | null) ?? null,
           maxCallSeconds: Number(cfg.maxCallSeconds ?? 600),
@@ -544,6 +613,8 @@ export async function createAbVariantAction(
       voiceId: String(cfg.voiceId ?? "anushka"),
       customVoice,
       llmModel: String(cfg.llmModel ?? "meta-llama/llama-3.1-70b-instruct"),
+      temperature: typeof cfg.temperature === "number" ? cfg.temperature : 0.7,
+      maxTokens: typeof cfg.maxTokens === "number" ? cfg.maxTokens : 300,
       maxCallSeconds: Number(cfg.maxCallSeconds ?? 600),
       kbGuardrail: cfg.kbGuardrail === true,
       conversationConfig: cfg.conversationConfig ?? {},
@@ -598,6 +669,55 @@ export async function removeAbVariantAction(agentId: string, variantId: string):
       workspaceId: ctx.workspaceId, userId: ctx.user.id,
       action: "agent.ab_variant_end", entity: "Agent", entityId: agentId,
       metadata: { variantId },
+    });
+    revalidatePath(`/agents/${agentId}`);
+    return { ok: true };
+  } catch (e) {
+    return handleError(e);
+  }
+}
+
+// ---------- Version pinning (AGENT-33) ----------
+
+/** Pin a PUBLISHED version: every call to this agent uses THIS version (its own
+ *  Dograh workflow) regardless of A/B split — the pinned version serves 100%. */
+export async function pinVersionAction(agentId: string, versionId: string): Promise<ActionResult> {
+  try {
+    const ctx = await requirePermission("agents:write");
+    const version = await db.agentVersion.findFirst({
+      where: { id: versionId, agentId, workspaceId: ctx.workspaceId, status: "PUBLISHED" },
+      select: { id: true },
+    });
+    if (!version) return { ok: false, error: "Only a published version can be pinned." };
+    const updated = await db.agent.updateMany({
+      where: { id: agentId, workspaceId: ctx.workspaceId },
+      data: { pinnedVersionId: version.id },
+    });
+    if (updated.count === 0) return { ok: false, error: "Agent not found." };
+    await audit({
+      workspaceId: ctx.workspaceId, userId: ctx.user.id,
+      action: "agent.pin_version", entity: "Agent", entityId: agentId,
+      metadata: { versionId: version.id },
+    });
+    revalidatePath(`/agents/${agentId}`);
+    return { ok: true };
+  } catch (e) {
+    return handleError(e);
+  }
+}
+
+/** Unpin: routing goes back to the A/B split (or the main version if no variant). */
+export async function unpinVersionAction(agentId: string): Promise<ActionResult> {
+  try {
+    const ctx = await requirePermission("agents:write");
+    const updated = await db.agent.updateMany({
+      where: { id: agentId, workspaceId: ctx.workspaceId },
+      data: { pinnedVersionId: null },
+    });
+    if (updated.count === 0) return { ok: false, error: "Agent not found." };
+    await audit({
+      workspaceId: ctx.workspaceId, userId: ctx.user.id,
+      action: "agent.unpin_version", entity: "Agent", entityId: agentId,
     });
     revalidatePath(`/agents/${agentId}`);
     return { ok: true };

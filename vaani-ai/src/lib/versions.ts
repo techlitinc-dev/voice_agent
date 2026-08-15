@@ -7,6 +7,8 @@ export type AgentSnapshot = {
     voiceId: string;
     customVoiceId: string | null;
     llmModel: string;
+    temperature: number;
+    maxTokens: number;
     languageMode: string;
     fixedLanguage: string | null;
     maxCallSeconds: number;
@@ -22,6 +24,8 @@ export function snapshotAgent(agent: {
   voiceId: string;
   customVoiceId: string | null;
   llmModel: string;
+  temperature: number;
+  maxTokens: number;
   languageMode: string;
   fixedLanguage: string | null;
   maxCallSeconds: number;
@@ -35,6 +39,8 @@ export function snapshotAgent(agent: {
       voiceId: agent.voiceId,
       customVoiceId: agent.customVoiceId,
       llmModel: agent.llmModel,
+      temperature: agent.temperature,
+      maxTokens: agent.maxTokens,
       languageMode: agent.languageMode,
       fixedLanguage: agent.fixedLanguage,
       maxCallSeconds: agent.maxCallSeconds,

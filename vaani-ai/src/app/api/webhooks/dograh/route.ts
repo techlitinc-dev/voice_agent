@@ -64,12 +64,18 @@ export async function POST(req: NextRequest) {
       let agentVersionId: string | null = null;
       if (pn?.agentId) {
         const fromNumber = str(data.from_number);
-        const versions = await db.agentVersion.findMany({
-          where: { agentId: pn.agentId, workspaceId, status: "PUBLISHED" },
-          select: { id: true, isAbVariant: true, abTrafficPercent: true, dograhWorkflowId: true, dograhWorkflowUuid: true },
-        });
+        const [agent, versions] = await Promise.all([
+          db.agent.findFirst({
+            where: { id: pn.agentId, workspaceId },
+            select: { pinnedVersionId: true },
+          }),
+          db.agentVersion.findMany({
+            where: { agentId: pn.agentId, workspaceId, status: "PUBLISHED" },
+            select: { id: true, isAbVariant: true, abTrafficPercent: true, dograhWorkflowId: true, dograhWorkflowUuid: true },
+          }),
+        ]);
         const resolved = fromNumber
-          ? resolveAgentForCall({ agentId: pn.agentId, callerPhone: fromNumber, publishedVersions: versions })
+          ? resolveAgentForCall({ agentId: pn.agentId, callerPhone: fromNumber, publishedVersions: versions, pinnedVersionId: agent?.pinnedVersionId ?? null })
           : null;
         agentVersionId = resolved?.versionId ?? null;
       }

@@ -38,6 +38,8 @@ export type WorkflowSpec = {
    *  provider's cloned voice instead of the Sarvam Bulbul stock voice. */
   customVoice?: { provider: string; clonedVoiceId: string; language: string } | null;
   llmModel: string;
+  temperature?: number; // LLM sampling temperature (0..1)
+  maxTokens?: number; // LLM max output tokens
   llmFallbacks?: string[];
   maxCallSeconds: number; // Dograh caps at 1200 — caller clamps
   controls: ConversationControls;
@@ -160,6 +162,8 @@ function llmHint(spec: WorkflowSpec): Record<string, unknown> {
   return {
     provider: "openrouter",
     model: spec.llmModel,
+    temperature: spec.temperature ?? 0.7,
+    max_tokens: spec.maxTokens ?? 300,
     fallbacks: spec.llmFallbacks ?? [],
   };
 }
