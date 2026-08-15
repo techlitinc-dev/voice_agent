@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PUBLIC_PATHS = ["/", "/login", "/register", "/status"];
+const PUBLIC_PATHS = ["/", "/login", "/register", "/forgot-password", "/reset-password", "/status"];
 const PUBLIC_PREFIXES = [
   "/api/webhooks/",   // Dograh/Razorpay webhooks have their own signature checks
   "/api/auth/",       // SSO start + callback routes set the cookie themselves

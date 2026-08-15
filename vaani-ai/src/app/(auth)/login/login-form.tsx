@@ -18,6 +18,7 @@ export function LoginForm() {
   const [error, setError] = useState<string | null>(
     search.get("error") === "sso" ? "SSO sign-in failed. Try again or use your password." : null
   );
+  const [resetDone] = useState(search.get("reset") === "1");
   const [loading, setLoading] = useState(false);
   const [pendingToken, setPendingToken] = useState<string | null>(null);
   const [useBackupCode, setUseBackupCode] = useState(false);
@@ -69,7 +70,19 @@ export function LoginForm() {
             <>
               <form data-testid="login-form" onSubmit={onSubmitPassword} className="space-y-4">
                 <Input data-testid="login-email-input" name="email" type="email" placeholder="you@business.com" required />
-                <Input data-testid="login-password-input" name="password" type="password" placeholder="Password" required />
+                <div>
+                  <Input data-testid="login-password-input" name="password" type="password" placeholder="Password" required />
+                  <div className="mt-1 text-right">
+                    <Link href="/forgot-password" data-testid="login-forgot-link" className="text-xs text-primary hover:underline">
+                      Forgot password?
+                    </Link>
+                  </div>
+                </div>
+                {resetDone && (
+                  <p data-testid="login-reset-banner" className="text-sm text-green-400">
+                    Password updated — sign in with your new password.
+                  </p>
+                )}
                 {error && <p data-testid="login-error" className="text-sm text-red-400">{error}</p>}
                 <Button data-testid="login-submit" className="w-full" disabled={loading}>
                   {loading ? "Signing in…" : "Sign in"}

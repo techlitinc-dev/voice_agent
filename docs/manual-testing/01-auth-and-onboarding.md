@@ -10,7 +10,7 @@
 | ID | Test Case | Steps | Expected | P |
 |---|---|---|---|---|
 | AUTH-01 | Register new workspace | 1. Go to `/register`. 2. Fill email `new@test.vaani.ai`, password `Test@1234!`, workspace "Test Co". 3. Click Register. | Workspace created, user logged in, redirected to `/onboarding`. | ☐ |
-| AUTH-02 | Register with existing email | 1. Go to `/register`. 2. Enter `owner@test.vaani.ai`. 3. Submit. | Error: "Email already registered" with login link. | ☐ |
+| AUTH-02 | Register with existing email | 1. Go to `/register`. 2. Enter `owner@test.vaani.ai`. 3. Submit. | Error: "An account with this email already exists." with login link. | ☐ |
 | AUTH-03 | Register with weak password | 1. Register with password `123`. | Validation error: password too short. Form does not submit. | ☐ |
 | AUTH-04 | Register with invalid email | 1. Register with email `notanemail`. | Validation error: invalid email. | ☐ |
 | AUTH-05 | Login with valid credentials | 1. Go to `/login`. 2. Enter `owner@test.vaani.ai` / `Test@1234!`. 3. Click Login. | Redirected to `/dashboard`. Session cookie set. | ☐ |
@@ -24,10 +24,10 @@
 
 | ID | Test Case | Steps | Expected | P |
 |---|---|---|---|---|
-| AUTH-11 | Request password reset | 1. Go to `/login`. 2. Click "Forgot password". 3. Enter `owner@test.vaani.ai`. 4. Submit. | Success message: "Check your email". Email sent with reset link. | ☐ |
-| AUTH-12 | Reset password with valid token | 1. Click reset link in email. 2. Enter new password. 3. Submit. | Password updated. Can login with new password. | ☐ |
-| AUTH-13 | Reset with expired token | 1. Use a reset link older than expiry. | Error: "Token expired". Offer to request new one. | ☐ |
-| AUTH-14 | Reset with already-used token | 1. Use the same reset link twice. | Error: "Token already used" on second attempt. | ☐ |
+| AUTH-11 | Request password reset | 1. Go to `/login`. 2. Click "Forgot password?" (→ `/forgot-password`). 3. Enter `owner@test.vaani.ai`. 4. Submit. | Success message: "If an account exists for that email, we've sent a reset link." Same message for unknown emails (no enumeration). Email sent with reset link (valid 60 min). | ☐ |
+| AUTH-12 | Reset password with valid token | 1. Open reset link `/reset-password?token=…`. 2. Enter new password + confirm. 3. Submit. 4. Log in with new password. | Password updated; login with new password succeeds; **all previous sessions revoked** (old session redirects to `/login`). | ☐ |
+| AUTH-13 | Reset with expired token | 1. Use a reset link older than 60 minutes (set `expiresAt` in DB to the past). | Error: "This reset link is invalid or has expired." Offer to request a new one. | ☐ |
+| AUTH-14 | Reset with already-used token | 1. Use the same reset link twice (second attempt after a successful reset). | Error: "This reset link is invalid or has expired." on second attempt — token is single-use. | ☐ |
 
 ## C. Two-Factor Authentication (TOTP)
 
@@ -50,10 +50,10 @@
 
 | ID | Test Case | Steps | Expected | P |
 |---|---|---|---|---|
-| AUTH-22 | Onboarding step 1: industry | 1. As new user, go to `/onboarding`. 2. Select industry "Healthcare". 3. Click Next. | Step 1 marked complete, advances to template step. | ☐ |
-| AUTH-23 | Onboarding step 2: template | 1. Select "Clinic Receptionist" template. 2. Click Next. | Agent created from template, advances to knowledge step. | ☐ |
-| AUTH-24 | Onboarding step 3: knowledge | 1. Upload a PDF. 2. Wait for indexing. | Document status changes PENDING → INDEXING → INDEXED. | ☐ |
-| AUTH-25 | Onboarding completes with test call | 1. Complete all steps. 2. Click "Make test call". | Test call connects, onboarding marked complete, checklist all green. | ☐ |
+| AUTH-22 | Onboarding step 1: industry | 1. As new user, go to `/onboarding`. 2. Select industry "Healthcare". 3. Click Next. | Step 1 marked complete (`Workspace.industry` set), advances to template step. | ☐ |
+| AUTH-23 | Onboarding step 2: template | 1. Select "Clinic Receptionist" template. 2. Click Next. | Agent created **from the template and published to Dograh** (`status = PUBLISHED`), visible in `/agents`, advances to knowledge step. | ☐ |
+| AUTH-24 | Onboarding step 3: knowledge (FAQ) | 1. Paste FAQ text into the textarea. 2. Click Save. | `KnowledgeDocument` (type FAQ) created with status `INDEXED` immediately. (PDF/DOCX upload lives on `/knowledge` — those stay `PENDING` until the operator syncs to the Dograh KB; not a failure.) | ☐ |
+| AUTH-25 | Onboarding completes with test call | 1. Complete all steps (industry + template mandatory; knowledge/test-call/number skippable). 2. Click "Start test call". 3. Click "Go live". | "Start test call" opens a **Dograh browser test run** (WebRTC widget — no real phone call). "Go live" marks onboarding complete (`completedAt` set), shows the "You're live" done card with links to Dashboard/Calls/Campaigns. | ☐ |
 
 ---
 

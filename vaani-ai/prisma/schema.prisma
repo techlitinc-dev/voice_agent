@@ -134,6 +134,7 @@ model User {
   totpSecret            TotpSecret?
   ssoIdentities         SsoIdentity[]
   backupCodes           BackupCode[]
+  passwordResetTokens   PasswordResetToken[]
   apiKeysCreated        ApiKey[]
   invitesSent           WorkspaceInvite[]
   transfersAccepted     TransferRequest[]
@@ -245,6 +246,20 @@ model TotpSecret {
   createdAt DateTime   @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique // sha256 of the raw token — raw token only ever shown in the email
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model SsoIdentity {
