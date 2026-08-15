@@ -151,6 +151,75 @@ async function main() {
     },
   });
 
+  // --- Manual-testing staging accounts (docs/manual-testing/00 §2.2) ---
+  // All share password Test@1234! and live in their own workspaces so re-runs
+  // never collide. owner@test.vaani.ai has onboarding COMPLETED so logins land
+  // on /dashboard directly (AUTH-05), not bounced to /onboarding.
+  const stagingPasswordHash = await bcrypt.hash("Test@1234!", 10);
+  const staging: {
+    email: string; fullName: string; workspace: string; slug: string;
+    role: "OWNER" | "ADMIN" | "MANAGER" | "AGENT" | "VIEWER"; completeOnboarding?: boolean;
+  }[] = [
+    { email: "owner@test.vaani.ai", fullName: "Test Owner", workspace: "Test Co", slug: "test-co-owner", role: "OWNER", completeOnboarding: true },
+    { email: "admin@test.vaani.ai", fullName: "Test Admin", workspace: "Test Co", slug: "test-co-owner", role: "ADMIN" },
+    { email: "manager@test.vaani.ai", fullName: "Test Manager", workspace: "Test Co", slug: "test-co-owner", role: "MANAGER" },
+    { email: "agent@test.vaani.ai", fullName: "Test Agent", workspace: "Test Co", slug: "test-co-owner", role: "AGENT" },
+    { email: "viewer@test.vaani.ai", fullName: "Test Viewer", workspace: "Test Co", slug: "test-co-owner", role: "VIEWER" },
+    { email: "tenant2@other.vaani.ai", fullName: "Tenant Two", workspace: "Other Co", slug: "other-co-tenant2", role: "OWNER" },
+  ];
+
+  for (const s of staging) {
+    const stagingUser = await db.user.upsert({
+      where: { email: s.email },
+      update: {},
+      create: { email: s.email, passwordHash: stagingPasswordHash, fullName: s.fullName },
+    });
+    const stagingWorkspace = await db.workspace.upsert({
+      where: { slug: s.slug },
+      update: {},
+      create: {
+        name: s.workspace,
+        slug: s.slug,
+        industry: s.slug.startsWith("test-co") ? "healthcare" : "logistics",
+      },
+    });
+    await db.membership.upsert({
+      where: { userId_workspaceId: { userId: stagingUser.id, workspaceId: stagingWorkspace.id } },
+      update: { role: s.role },
+      create: { userId: stagingUser.id, workspaceId: stagingWorkspace.id, role: s.role },
+    });
+    // OWNER workspaces get a wallet + starter subscription (billing pages render).
+    if (s.role === "OWNER") {
+      await db.wallet.upsert({
+        where: { workspaceId: stagingWorkspace.id },
+        update: {},
+        create: { workspaceId: stagingWorkspace.id, balancePaise: 100000 }, // ₹1,000
+      });
+      await db.subscription.upsert({
+        where: { workspaceId: stagingWorkspace.id },
+        update: {},
+        create: {
+          workspaceId: stagingWorkspace.id,
+          planId: starter.id,
+          status: "active",
+          currentPeriodEnd: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        },
+      });
+    }
+    if (s.completeOnboarding) {
+      await db.onboardingState.upsert({
+        where: { workspaceId: stagingWorkspace.id },
+        update: { completedAt: new Date() },
+        create: {
+          workspaceId: stagingWorkspace.id,
+          currentStep: 5,
+          checklist: { industry: true, template: true, knowledge: true, test_call: true, number: true },
+          completedAt: new Date(),
+        },
+      });
+    }
+  }
+
   // --- Demo content (agent, calls, campaigns, ...) ---
   // Idempotency guard: the demo content is created once. A re-run (e.g. phase 6
   // smoke-seed) must not collide on its unique keys, so skip it if the demo
@@ -687,6 +756,7 @@ clinic manager call back. End every call by summarizing what was agreed.`,
   console.log("Seed complete:");
   console.log("  login:     demo@vaani.ai / demo1234");
   console.log("  workspace: Demo Dental Clinic (demo-clinic)");
+  console.log("  staging:   owner/admin/manager/agent/viewer@test.vaani.ai + tenant2@other.vaani.ai (Test@1234!)");
   console.log("  plans:     starter, growth, enterprise (with feature gates)");
   console.log("  demo rows: agent+version, knowledge doc, tool configs, pool+2 numbers,");
   console.log("             contacts+DNC, campaign, 2 calls (1 completed+QA, 1 live+transfer),");

@@ -24,7 +24,12 @@ export function LoginForm() {
   const [useBackupCode, setUseBackupCode] = useState(false);
 
   function afterSuccess() {
-    router.push(search.get("next") ?? "/dashboard");
+    // Only redirect to same-origin paths — a crafted ?next=https://evil.com
+    // would otherwise open-redirect after login (the middleware always sets a
+    // pathname, never a full URL).
+    const next = search.get("next");
+    const safe = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+    router.push(safe);
     router.refresh();
   }
 

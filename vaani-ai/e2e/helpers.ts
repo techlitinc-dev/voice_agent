@@ -15,6 +15,12 @@ export function sh(cmd: string): string {
   return execSync(cmd, { cwd: path.join(__dirname, ".."), encoding: "utf-8" }).trim();
 }
 
+/** Read a value from .env, stripping inline `# comments` (the dotenv format). */
+export function envValue(key: string): string {
+  const line = sh(`grep '^${key}=' .env | cut -d= -f2-`);
+  return line.replace(/\s*#.*$/, "").trim();
+}
+
 /** psql helper against the dev db container. */
 export function psql(sql: string): string {
   const dbContainer = process.env.E2E_DB_CONTAINER ?? "vaani-db-dev";
@@ -55,10 +61,20 @@ export async function loginViaUi(page: Page, email: string, password: string): P
   await expect(page).toHaveURL(/\/(dashboard|onboarding)/, { timeout: 15_000 });
 }
 
+/**
+ * Logout through the user menu. The logout button lives inside the Radix
+ * dropdown, which is only mounted while open — open the menu first.
+ */
+export async function logoutViaUi(page: Page): Promise<void> {
+  await page.getByTestId("user-menu-trigger").click();
+  await page.getByTestId("logout-button").click();
+  await expect(page).toHaveURL(/\/login/);
+}
+
 /** Register a brand-new workspace through the UI. Returns the credentials. */
 export async function registerFreshWorkspace(page: Page, tag: string) {
   const email = `e2e-${tag}-${Date.now()}@test.dev`;
-  const password = "e2e-pass-1234";
+  const password = "E2e-pass-1234!"; // must satisfy the register password complexity rule
   await page.goto("/register");
   await page.getByTestId("register-name-input").fill("E2E Tester");
   await page.getByTestId("register-business-input").fill(`E2E ${tag}`);
@@ -155,7 +171,7 @@ export function seedTestDid(): void {
 
 /** Sign a Dograh webhook body exactly like Dograh does (guide 04/06). */
 export function dograhSignature(body: string): string {
-  const secret = sh(`grep '^DOGRAH_WEBHOOK_SECRET=' .env | cut -d= -f2`);
+  const secret = envValue("DOGRAH_WEBHOOK_SECRET");
   return createHmac("sha256", secret).update(body).digest("hex");
 }
 

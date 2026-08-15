@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { requireWorkspace } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatINR } from "@/lib/money";
@@ -18,7 +19,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   try {
     ctx = await requireWorkspace();
   } catch {
-    redirect("/login");
+    // No/expired/revoked session → back to login. The middleware forwards the
+    // attempted path via x-vaani-pathname so a fresh login lands where the user
+    // was headed (AUTH-10), and an expired session (AUTH-09) carries ?next= too.
+    const next = headers().get("x-vaani-pathname") || "/dashboard";
+    redirect(`/login?next=${encodeURIComponent(next)}`);
   }
 
   const [wallet, workspace, onboarding] = await Promise.all([

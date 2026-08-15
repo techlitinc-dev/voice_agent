@@ -17,6 +17,9 @@ import { logAudit } from "@/lib/audit";
 import { provisionUserWithWorkspace } from "@/lib/provision";
 import { findMatchingBackupCode, verifyTotpCode } from "@/lib/totp";
 
+// Password rule shared with the register form client (src/lib/password-rules.ts).
+import { PASSWORD_RULE, PASSWORD_HINT } from "@/lib/password-rules";
+
 export type ActionResult = {
   ok: boolean;
   error?: string;
@@ -27,13 +30,16 @@ export type ActionResult = {
 const registerSchema = z.object({
   fullName: z.string().min(2).max(80),
   email: z.string().email().toLowerCase(),
-  password: z.string().min(8).max(100),
+  password: z.string().min(8).max(100).regex(PASSWORD_RULE, PASSWORD_HINT),
   businessName: z.string().min(2).max(80),
 });
 
 export async function registerAction(input: unknown): Promise<ActionResult> {
   const parsed = registerSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid details. Password must be 8+ characters." };
+  if (!parsed.success) {
+    const passwordIssue = parsed.error.issues.find((i) => i.path[0] === "password");
+    return { ok: false, error: passwordIssue?.message ?? "Invalid details. Check the form and try again." };
+  }
   const { fullName, email, password, businessName } = parsed.data;
 
   const existing = await db.user.findUnique({ where: { email } });

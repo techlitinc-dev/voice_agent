@@ -48,9 +48,11 @@ export function UserMenu({ name, email }: { name: string; email: string }) {
           Shortcuts
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem className="text-red-600" asChild>
-          <form action={logoutAction}>
-            <button type="submit" className="flex w-full items-center" data-testid="logout-button">
+        {/* Not asChild: Radix Item prevents default on click, which would swallow
+            the form's submit. A plain form child keeps the server action working. */}
+        <DropdownMenuItem className="p-0 text-red-600" onSelect={(e) => e.preventDefault()}>
+          <form action={logoutAction} className="w-full">
+            <button type="submit" className="flex w-full items-center px-2 py-1.5 text-sm" data-testid="logout-button">
               <LogOut className="mr-2 h-4 w-4" /> Log out
             </button>
           </form>

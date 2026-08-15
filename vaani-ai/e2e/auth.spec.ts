@@ -4,6 +4,7 @@ import {
   completeOnboardingFast,
   loginAsRole,
   loginViaUi,
+  logoutViaUi,
   registerFreshWorkspace,
 } from "./helpers";
 
@@ -15,8 +16,7 @@ test.describe("auth (guide 03 + guide 10 wizard redirect)", () => {
     await completeOnboardingFast(page);
     await expect(page.getByTestId("app-sidebar")).toBeVisible();
 
-    await page.getByTestId("logout-button").click();
-    await expect(page).toHaveURL(/\/login/);
+    await logoutViaUi(page);
 
     await loginViaUi(page, email, password);
     // Wizard is completed now — no more force-redirect.
@@ -40,7 +40,7 @@ test.describe("auth (guide 03 + guide 10 wizard redirect)", () => {
     expect(backupCodes.length).toBeGreaterThanOrEqual(6);
 
     // Login with a TOTP code (one retry across the 30s window boundary).
-    await page.getByTestId("logout-button").click();
+    await logoutViaUi(page);
     await page.goto("/login");
     await page.getByTestId("login-email-input").fill(email);
     await page.getByTestId("login-password-input").fill(password);
@@ -49,13 +49,15 @@ test.describe("auth (guide 03 + guide 10 wizard redirect)", () => {
     await page.getByTestId("login-totp-input").fill(authenticator.generate(secret));
     await page.getByTestId("login-totp-submit").click();
     if (await page.getByTestId("login-error").isVisible()) {
+      // input-otp doesn't fully replace a previous value on fill() — clear first.
+      await page.getByTestId("login-totp-input").fill("");
       await page.getByTestId("login-totp-input").fill(authenticator.generate(secret));
       await page.getByTestId("login-totp-submit").click();
     }
     await expect(page).toHaveURL(/\/(dashboard|onboarding)/, { timeout: 15_000 });
 
     // Backup code login — first use succeeds.
-    await page.getByTestId("logout-button").click();
+    await logoutViaUi(page);
     await page.goto("/login");
     await page.getByTestId("login-email-input").fill(email);
     await page.getByTestId("login-password-input").fill(password);
@@ -67,7 +69,7 @@ test.describe("auth (guide 03 + guide 10 wizard redirect)", () => {
     await expect(page).toHaveURL(/\/(dashboard|onboarding)/, { timeout: 15_000 });
 
     // NEGATIVE: reusing the same backup code MUST fail.
-    await page.getByTestId("logout-button").click();
+    await logoutViaUi(page);
     await page.goto("/login");
     await page.getByTestId("login-email-input").fill(email);
     await page.getByTestId("login-password-input").fill(password);

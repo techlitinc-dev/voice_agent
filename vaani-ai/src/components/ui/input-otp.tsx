@@ -31,7 +31,13 @@ const InputOTPSlot = React.forwardRef<
   React.ComponentPropsWithoutRef<"div"> & { index: number }
 >(({ index, className, ...props }, ref) => {
   const inputOTPContext = React.useContext(OTPInputContext);
-  const { char, hasFakeCaret, isActive } = inputOTPContext.slots[index];
+  // Guard against the context default ({}) — input-otp may not have provided
+  // slots yet on first render (React 18 strict-mode double-render / HMR).
+  const { char, hasFakeCaret, isActive } = inputOTPContext.slots?.[index] ?? {
+    char: null,
+    hasFakeCaret: false,
+    isActive: false,
+  };
 
   return (
     <div
