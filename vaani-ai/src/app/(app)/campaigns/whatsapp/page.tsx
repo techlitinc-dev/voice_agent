@@ -2,11 +2,11 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireWorkspace } from "@/lib/auth";
 import {
-  createTemplateAction,
   setTemplateStatusAction,
   createWhatsAppCampaignAction,
   startWhatsAppCampaignAction,
 } from "@/server/actions/whatsapp";
+import { TemplateCreateForm } from "./template-create-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,15 +31,6 @@ export default async function WhatsAppPage() {
     }),
   ]);
 
-  async function createTemplate(formData: FormData) {
-    "use server";
-    await createTemplateAction({
-      name: formData.get("name"),
-      language: formData.get("language"),
-      body: formData.get("body"),
-      dltTemplateId: formData.get("dltTemplateId") || null,
-    });
-  }
   async function setStatus(formData: FormData) {
     "use server";
     await setTemplateStatusAction(
@@ -72,22 +63,7 @@ export default async function WhatsAppPage() {
       <Card>
         <CardHeader><CardTitle>New template</CardTitle></CardHeader>
         <CardContent>
-          <form action={createTemplate} className="space-y-3" data-testid="whatsapp-template-form">
-            <div className="flex flex-wrap gap-2">
-              <Input name="name" placeholder="call_followup" required className="w-56" data-testid="template-name-input" />
-              <Input name="language" defaultValue="en" className="w-24" />
-              <Input name="dltTemplateId" placeholder="DLT template id (India)" className="w-56" />
-            </div>
-            <textarea
-              name="body"
-              rows={3}
-              required
-              placeholder={"Hi {{1}}, thanks for speaking with us. Your details are confirmed."}
-              className="w-full rounded-md border border-border bg-card p-2 text-sm"
-              data-testid="template-body-input"
-            />
-            <Button type="submit">Create template</Button>
-          </form>
+          <TemplateCreateForm />
         </CardContent>
       </Card>
 
@@ -131,14 +107,14 @@ export default async function WhatsAppPage() {
         <CardHeader><CardTitle>New WhatsApp campaign</CardTitle></CardHeader>
         <CardContent>
           <form action={createCampaign} className="flex flex-wrap items-center gap-2" data-testid="whatsapp-campaign-form">
-            <Input name="name" placeholder="Campaign name" required className="w-56" />
+            <Input name="name" placeholder="Campaign name" required className="w-56" data-testid="wa-campaign-name-input" />
             <select name="templateId" required className="h-9 rounded-md border border-border bg-card px-3 text-sm" data-testid="wa-template-select">
               {templates.filter((t) => t.status === "APPROVED").map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
-            <select name="listId" required className="h-9 rounded-md border border-border bg-card px-3 text-sm">
+            <select name="listId" required className="h-9 rounded-md border border-border bg-card px-3 text-sm" data-testid="wa-list-select">
               {lists.map((l) => <option key={l.id} value={l.id}>{l.name} ({l._count.contacts})</option>)}
             </select>
-            <Button type="submit">Create</Button>
+            <Button type="submit" data-testid="wa-campaign-create-submit">Create</Button>
           </form>
         </CardContent>
       </Card>

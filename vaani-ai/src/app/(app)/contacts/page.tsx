@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { requireWorkspace } from "@/lib/auth";
 import { CsvUploader } from "./csv-uploader";
 import { CrmImportButton } from "./crm-import-button";
-import { toggleDncAction } from "@/server/actions/contacts";
+import { toggleDncAction, recordConsentAction } from "@/server/actions/contacts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -44,6 +44,11 @@ export default async function ContactsPage({
   async function toggleDnc(formData: FormData) {
     "use server";
     await toggleDncAction(String(formData.get("id")), formData.get("dnc") === "true");
+  }
+
+  async function recordConsent(formData: FormData) {
+    "use server";
+    await recordConsentAction(String(formData.get("id")));
   }
 
   return (
@@ -99,7 +104,12 @@ export default async function ContactsPage({
                   <td className="p-2" data-testid="consent-cell">
                     {c.optOutAt ? <span className="text-red-400">opted out</span>
                       : c.consentAt ? <span className="text-green-400">{c.consentSource ?? "yes"}</span>
-                      : "—"}
+                      : (
+                        <form action={recordConsent}>
+                          <input type="hidden" name="id" value={c.id} />
+                          <Button size="sm" variant="ghost" data-testid="record-consent-btn">Record consent</Button>
+                        </form>
+                      )}
                   </td>
                   <td className="p-2 text-muted-foreground">
                     {c.attributes ? Object.entries(c.attributes as Record<string, string>).map(([k, v]) => `${k}: ${v}`).join(", ") : "—"}

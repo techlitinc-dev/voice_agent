@@ -13,7 +13,9 @@ const templateSchema = z.object({
   name: z.string().min(2).max(60).regex(/^[a-z0-9_]+$/, "lowercase letters, digits, underscores only (Meta template-name rules)"),
   language: z.string().min(2).max(10),
   body: z.string().min(10).max(1024),
-  dltTemplateId: z.string().max(60).nullable().optional(),
+  // DLT registration ids (India) are compact alphanumeric strings — reject junk
+  // up front (CAMP-29). Optional for non-DLT markets.
+  dltTemplateId: z.string().regex(/^[A-Za-z0-9_-]{6,30}$/, "Invalid DLT id — 6–30 letters/digits, - or _ only").nullable().optional(),
 });
 
 /** Create a template locally. Status starts DRAFT. OPERATOR GATE: submitting to

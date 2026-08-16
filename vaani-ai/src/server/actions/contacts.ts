@@ -270,3 +270,22 @@ export async function toggleDncAction(contactId: string, dnc: boolean): Promise<
     return { ok: false, error: "Something went wrong." };
   }
 }
+
+/** Record consent given in person / verbally (CAMP-22). Sets Contact.consentAt so
+ *  promotional campaigns may dial the number when REQUIRE_CONSENT_FOR_PROMOTIONAL. */
+export async function recordConsentAction(contactId: string): Promise<ActionResult> {
+  const ctx = await requirePermission("contacts:write");
+  try {
+    const updated = await db.contact.updateMany({
+      where: { id: contactId, workspaceId: ctx.workspaceId },
+      data: { consentAt: new Date(), consentSource: "manual" },
+    });
+    if (updated.count === 0) return { ok: false, error: "Contact not found." };
+    await audit({ workspaceId: ctx.workspaceId, userId: ctx.user.id, action: "contacts.consent-record", entity: "Contact", entityId: contactId });
+    revalidatePath("/contacts");
+    return { ok: true };
+  } catch (e) {
+    console.error(e);
+    return { ok: false, error: "Could not record consent." };
+  }
+}

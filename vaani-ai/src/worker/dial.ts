@@ -22,9 +22,12 @@ const DRY_RUN = process.env.CAMPAIGN_DRY_RUN !== "false"; // default true — sa
 const FORCED = process.env.CAMPAIGN_DRY_RUN_RESULT || ""; // deterministic tests
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
 
-/** Simulated outcome distribution: 70% completed, 15% no-answer, 10% busy, 5% voicemail. */
-function simulateResult(): "completed" | Disposition {
-  if (FORCED === "completed" || isDisposition(FORCED)) return FORCED as "completed" | Disposition;
+/** Simulated outcome distribution: 70% completed, 15% no-answer, 10% busy, 5% voicemail.
+ *  A per-contact override (Contact.attributes.e2eOutcome) wins — tests pin a disposition
+ *  per contact without restarting the worker; CAMPAIGN_DRY_RUN_RESULT is the global pin. */
+function simulateResult(forced?: string): "completed" | Disposition {
+  const pin = forced ?? FORCED;
+  if (pin === "completed" || isDisposition(pin)) return pin as "completed" | Disposition;
   const r = Math.random();
   if (r < 0.7) return "completed";
   if (r < 0.85) return "no-answer";
@@ -150,7 +153,11 @@ export async function dialJob(job: Job<DialJobData>): Promise<void> {
   let result: "completed" | Disposition;
   let callId: string | null = null;
   if (DRY_RUN) {
-    result = simulateResult();
+    // Per-contact pin (e2e retry/disposition tests) → global env pin → random.
+    const forced = typeof contact.attributes === "object" && contact.attributes !== null
+      ? String((contact.attributes as Record<string, unknown>).e2eOutcome ?? "")
+      : "";
+    result = simulateResult(forced);
   } else {
     try {
       // A/B + version routing (guide 05): pick the serving published version.

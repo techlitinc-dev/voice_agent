@@ -51,8 +51,8 @@ export default async function PoolsPage() {
         <CardHeader><CardTitle>Create pool</CardTitle></CardHeader>
         <CardContent>
           <form action={createPool} className="flex gap-2" data-testid="pool-create-form">
-            <Input name="name" placeholder="Pool name (e.g. Promo 140 pool)" required className="w-72" />
-            <Button type="submit">Create</Button>
+            <Input name="name" placeholder="Pool name (e.g. Promo 140 pool)" required className="w-72" data-testid="pool-name-input" />
+            <Button type="submit" data-testid="pool-create-submit">Create</Button>
           </form>
         </CardContent>
       </Card>
@@ -78,7 +78,7 @@ export default async function PoolsPage() {
                     <td className="p-2">
                       <form action={removeNumber}>
                         <input type="hidden" name="id" value={n.id} />
-                        <Button size="sm" variant="ghost">Remove</Button>
+                        <Button size="sm" variant="ghost" data-testid="pool-number-remove">Remove</Button>
                       </form>
                     </td>
                   </tr>
@@ -97,7 +97,7 @@ export default async function PoolsPage() {
               </select>
               <Input name="dailyCallCap" type="number" placeholder="Daily cap" className="w-28" min={1} />
               <Input name="lifetimeCallCap" type="number" placeholder="Lifetime cap" className="w-32" min={1} />
-              <Button type="submit" size="sm">Add number</Button>
+              <Button type="submit" size="sm" data-testid="pool-add-number-submit">Add number</Button>
             </form>
           </CardContent>
         </Card>

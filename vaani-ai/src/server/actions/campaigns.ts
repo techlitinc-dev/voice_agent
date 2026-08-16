@@ -192,6 +192,15 @@ async function setStatus(
   if (to === "RUNNING") await ensureCampaignScheduler(campaignId);
   else await stopCampaignScheduler(campaignId);
 
+  // CAMP-10: cancel marks every unfinished contact CANCELLED — no further dials
+  // (dial-time re-checks status, so in-flight DIALING rows are skipped too).
+  if (to === "CANCELLED") {
+    await db.campaignContact.updateMany({
+      where: { campaignId, status: { in: ["PENDING", "DIALING", "RETRY_SCHEDULED"] } },
+      data: { status: "CANCELLED", lastResult: "cancelled" },
+    });
+  }
+
   await audit({
     workspaceId: ctx.workspaceId, userId: ctx.user.id,
     action: `campaign.${action}`, entity: "Campaign", entityId: campaignId,

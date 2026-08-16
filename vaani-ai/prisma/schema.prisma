@@ -667,6 +667,7 @@ enum CampaignContactStatus {
   FAILED
   RETRY_SCHEDULED
   SKIPPED_DNC
+  CANCELLED
 }
 
 model CampaignContact {

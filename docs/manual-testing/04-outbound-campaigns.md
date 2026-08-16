@@ -80,3 +80,30 @@
 - For CAMP-19, seed a `DncEntry` via contacts page DNC toggle before launching.
 - Verify campaign statuses and `CampaignContact.status` with `psql`.
 - Cross-browser: run CAMP-07, CAMP-25 on Chrome and Safari.
+
+## Automated coverage
+
+`e2e/campaigns-outbound.spec.ts` (Playwright, dry-run worker) automates the
+deterministic CAMP cases — run with the app + worker up:
+
+```bash
+npx playwright test --config=e2e/playwright.config.ts e2e/campaigns-outbound.spec.ts
+```
+
+| Covered by e2e | CAMP ids |
+|---|---|
+| Preset prefill, validation, duplicate CSV, cancel | 02, 03, 05, 10 |
+| Retry on no-answer, max attempts → FAILED | 14, 16 |
+| DNC scrub on launch, opt-out during call | 19, 20 |
+| Consent recording (manual), WhatsApp approval + send, DLT validation | 22, 27, 28, 29 |
+| Pool rotation, per-number cap, manual dial | 23, 24, 25 |
+
+Retry/DNC tests pin the dry-run outcome per contact via
+`Contact.attributes.e2eOutcome` (`"completed" | "no-answer" | "busy" | "voicemail" | "failed"`)
+so results are deterministic — no worker restart or env change needed.
+
+**Operator-gated (manual only):** CAMP-08 (queue pacing — redis-cli), CAMP-09
+(resume — same `setStatus` path as pause, covered by `campaigns.spec.ts`),
+CAMP-11/12 (TRAI window deferral — wall-clock), CAMP-13 (adaptive ramp — 10-min
+observation), CAMP-15 (busy/AMD real behavior), CAMP-21 (real rented 140 number —
+pool type validation is unit-tested), CAMP-26 (webRTC call state).
