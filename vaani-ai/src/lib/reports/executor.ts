@@ -161,25 +161,43 @@ function aggregateMetric(rows: ReportRow[], metric: MetricKey): number | null {
 
 // ---------- Executor ----------
 
+/**
+ * Normalize a legacy report config. Older seeds stored groupBy as a bare string
+ * ("day") instead of an array; the run/export routes pass raw stored JSON into
+ * executeReport, so coerce it here once instead of in every executor.
+ */
+function normalizeConfig(config: ReportConfig): ReportConfig {
+  const groupBy = Array.isArray(config.groupBy)
+    ? config.groupBy
+    : config.groupBy
+      ? [config.groupBy]
+      : [];
+  const metrics = Array.isArray(config.metrics) && config.metrics.length > 0
+    ? config.metrics
+    : (["count"] as ReportConfig["metrics"]);
+  return { ...config, groupBy, metrics };
+}
+
 /** Execute a report config for a workspace. Returns rows + summary. */
 export async function executeReport(workspaceId: string, config: ReportConfig): Promise<ReportResult> {
-  const range = resolveRange(config);
-  const limit = Math.min(config.limit ?? 1000, MAX_ROWS);
+  const normalized = normalizeConfig(config);
+  const range = resolveRange(normalized);
+  const limit = Math.min(normalized.limit ?? 1000, MAX_ROWS);
 
-  if (config.source === "calls") {
-    return executeCalls(workspaceId, config, range, limit);
+  if (normalized.source === "calls") {
+    return executeCalls(workspaceId, normalized, range, limit);
   }
-  if (config.source === "deals") {
-    return executeDeals(workspaceId, config, range, limit);
+  if (normalized.source === "deals") {
+    return executeDeals(workspaceId, normalized, range, limit);
   }
-  if (config.source === "campaigns") {
-    return executeCampaigns(workspaceId, config, range, limit);
+  if (normalized.source === "campaigns") {
+    return executeCampaigns(workspaceId, normalized, range, limit);
   }
-  if (config.source === "cost") {
-    return executeCost(workspaceId, config, range, limit);
+  if (normalized.source === "cost") {
+    return executeCost(workspaceId, normalized, range, limit);
   }
   // contacts/tasks/activities fall back to a simple table
-  return executeSimpleTable(workspaceId, config, range, limit);
+  return executeSimpleTable(workspaceId, normalized, range, limit);
 }
 
 async function executeCalls(workspaceId: string, config: ReportConfig, range: DateRange, limit: number): Promise<ReportResult> {

@@ -17,10 +17,18 @@ export const metadata = { title: "Calls — Vaani AI" };
 export default async function CallsPage({
   searchParams,
 }: {
-  searchParams: { direction?: string; status?: string; q?: string; transcript?: string };
+  searchParams: { direction?: string; status?: string; q?: string; transcript?: string; agent?: string; hallucination?: string };
 }) {
   let ctx;
   try { ctx = await requireWorkspace(); } catch { redirect("/login"); }
+
+  const [agents] = await Promise.all([
+    db.agent.findMany({
+      where: { workspaceId: ctx.workspaceId },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
 
   // Full-text transcript search (Postgres FTS, Step 5). Falls back to empty when
   // the migration has not been applied yet, so the page never crashes.
@@ -34,6 +42,8 @@ export default async function CallsPage({
     workspaceId: ctx.workspaceId,
     ...(searchParams.direction ? { direction: searchParams.direction as "INBOUND" | "OUTBOUND" } : {}),
     ...(searchParams.status ? { status: searchParams.status as never } : {}),
+    ...(searchParams.agent ? { agentId: searchParams.agent } : {}),
+    ...(searchParams.hallucination === "true" ? { hallucinationFlag: true } : {}),
     ...(searchParams.q
       ? {
           OR: [
@@ -91,6 +101,21 @@ export default async function CallsPage({
           {["COMPLETED", "FAILED", "NO_ANSWER", "BUSY", "IN_PROGRESS", "VOICEMAIL"].map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
+        </select>
+        <select name="agent" defaultValue={searchParams.agent ?? ""}
+          data-testid="calls-agent-filter"
+          className="h-9 rounded-md border border-border bg-card px-3 text-sm">
+          <option value="">All agents</option>
+          {agents.map((a) => (
+            <option key={a.id} value={a.id}>{a.name}</option>
+          ))}
+        </select>
+        <select name="hallucination" defaultValue={searchParams.hallucination ?? ""}
+          data-testid="calls-hallucination-filter"
+          className="h-9 rounded-md border border-border bg-card px-3 text-sm">
+          <option value="">All calls</option>
+          <option value="true">Hallucination flagged</option>
+          <option value="false">No hallucination</option>
         </select>
         <button data-testid="calls-filter-button"
           className="h-9 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground">Filter</button>

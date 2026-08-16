@@ -80,7 +80,12 @@ export default async function AgentPerformancePage() {
             <tbody>
               {perf.map((a) => (
                 <tr key={a.agentId} className="border-b last:border-0">
-                  <td className="p-3 font-medium">{a.agentName}</td>
+                  <td className="p-3 font-medium">
+                    <Link href={`/calls?agent=${a.agentId}`} data-testid={`agent-link-${a.agentId}`}
+                      className="hover:text-primary hover:underline">
+                      {a.agentName}
+                    </Link>
+                  </td>
                   <td className="p-3">{a.calls}</td>
                   <td className="p-3">
                     {a.avgScriptAdherence === null ? "—" : (
@@ -96,7 +101,14 @@ export default async function AgentPerformancePage() {
                     ) : "0"}
                   </td>
                   <td className="p-3">{a.avgDeadAirSec}s</td>
-                  <td className="p-3">{a.avgQaPercent === null ? "—" : `${a.avgQaPercent}%`}</td>
+                  <td className="p-3">
+                    {a.avgQaPercent === null ? "—" : (
+                      <Link href={`/calls?agent=${a.agentId}`} data-testid={`qa-link-${a.agentId}`}
+                        className="text-primary hover:underline">
+                        {a.avgQaPercent}%
+                      </Link>
+                    )}
+                  </td>
                 </tr>
               ))}
               {perf.length === 0 && (

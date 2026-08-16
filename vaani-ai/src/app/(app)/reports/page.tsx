@@ -66,7 +66,8 @@ export default async function ReportsPage() {
           </Card>
         ) : (
           visible.map((r) => {
-            const config = (r.config ?? {}) as { source?: string; metrics?: string[]; groupBy?: string[]; chart?: { type?: string } };
+            const raw = (r.config ?? {}) as { source?: string; metrics?: string[]; groupBy?: string | string[]; chart?: { type?: string } };
+            const config = { ...raw, groupBy: Array.isArray(raw.groupBy) ? raw.groupBy : raw.groupBy ? [raw.groupBy] : undefined };
             return (
               <Card key={r.id} data-testid={`report-card-${r.id}`}>
                 <CardHeader>

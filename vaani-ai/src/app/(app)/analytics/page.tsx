@@ -10,19 +10,33 @@ import { AnalyticsCharts } from "./charts";
 export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Analytics — Vaani AI" };
-export default async function AnalyticsPage() {
+export default async function AnalyticsPage({
+  searchParams,
+}: {
+  searchParams: { agent?: string };
+}) {
   let ctx;
   try { ctx = await requireWorkspace(); } catch { redirect("/login"); }
 
   const since = new Date(Date.now() - 30 * 24 * 3600 * 1000);
+  const agentFilter = searchParams.agent?.trim() || null;
   const calls = await db.call.findMany({
-    where: { workspaceId: ctx.workspaceId, createdAt: { gte: since } },
+    where: {
+      workspaceId: ctx.workspaceId,
+      createdAt: { gte: since },
+      ...(agentFilter ? { agentId: agentFilter } : {}),
+    },
     select: {
       createdAt: true, answeredAt: true, status: true, direction: true, outcome: true,
       fromNumber: true, toNumber: true, durationSec: true, billedPaise: true,
       costTelephonyPaise: true, costSttPaise: true, costLlmPaise: true, costTtsPaise: true,
     },
     orderBy: { createdAt: "asc" },
+  });
+  const agents = await db.agent.findMany({
+    where: { workspaceId: ctx.workspaceId },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
   });
 
   // --- Aggregate per day ---
@@ -65,11 +79,27 @@ export default async function AnalyticsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold">Analytics — last 30 days</h1>
-        <div className="flex gap-4 text-sm">
-          <Link href="/analytics/funnel" className="text-primary hover:underline" data-testid="nav-funnel-cohorts">Funnel & cohorts →</Link>
-          <Link href="/analytics/campaigns" className="text-primary hover:underline" data-testid="nav-campaign-reports">Campaign reports →</Link>
-          <Link href="/analytics/agents" className="text-primary hover:underline" data-testid="nav-agent-performance">Agent performance →</Link>
-          <Link href="/analytics/cost" className="text-primary hover:underline" data-testid="nav-cost-analytics">Cost & margins →</Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <form className="flex items-center gap-2">
+            <select name="agent" defaultValue={agentFilter ?? ""}
+              data-testid="analytics-agent-filter"
+              className="h-9 rounded-md border border-border bg-card px-3 text-sm">
+              <option value="">All agents</option>
+              {agents.map((a) => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+            <button data-testid="analytics-agent-apply"
+              className="h-9 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground">
+              Apply
+            </button>
+          </form>
+          <div className="flex gap-4 text-sm">
+            <Link href="/analytics/funnel" className="text-primary hover:underline" data-testid="nav-funnel-cohorts">Funnel & cohorts →</Link>
+            <Link href="/analytics/campaigns" className="text-primary hover:underline" data-testid="nav-campaign-reports">Campaign reports →</Link>
+            <Link href="/analytics/agents" className="text-primary hover:underline" data-testid="nav-agent-performance">Agent performance →</Link>
+            <Link href="/analytics/cost" className="text-primary hover:underline" data-testid="nav-cost-analytics">Cost & margins →</Link>
+          </div>
         </div>
       </div>
 
