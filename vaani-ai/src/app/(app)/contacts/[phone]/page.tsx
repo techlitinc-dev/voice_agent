@@ -21,7 +21,9 @@ export default async function ContactDetailPage({ params }: { params: { phone: s
     redirect("/login");
   }
 
-  const data = await getContactCrmData(ctx.workspaceId, params.phone);
+  // Next app-router params arrive URL-encoded (the contacts list links with
+  // encodeURIComponent(phone)) — decode before the phone lookup.
+  const data = await getContactCrmData(ctx.workspaceId, decodeURIComponent(params.phone));
   if (!data) notFound();
   const { contact, calls } = data;
 
@@ -35,6 +37,77 @@ export default async function ContactDetailPage({ params }: { params: { phone: s
     userName: a.user?.fullName ?? null,
     callId: a.callId,
   }));
+
+  const tabPanels = [
+    <Card key="activity">
+      <CardContent className="pt-6">
+        <ActivityTimeline activities={activities} showFilters />
+      </CardContent>
+    </Card>,
+    <Card key="calls">
+      <CardContent className="pt-6">
+        <div className="space-y-3">
+          {calls.map((c) => (
+            <div key={c.id} className="flex items-center justify-between rounded border p-3 text-sm">
+              <div className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium">{c.direction === "INBOUND" ? "Inbound" : "Outbound"}</span>
+                <span className="text-muted-foreground">{c.status}</span>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {c.durationSec}s · {c.startedAt.toLocaleString("en-IN")}
+                {c.outcome ? ` · ${c.outcome}` : ""}
+              </div>
+            </div>
+          ))}
+          {calls.length === 0 && <p className="text-sm text-muted-foreground">No calls.</p>}
+        </div>
+      </CardContent>
+    </Card>,
+    <Card key="messages">
+      <CardContent className="pt-6">
+        <div className="space-y-4">
+          {contact.conversations.length === 0 && (
+            <p className="text-sm text-muted-foreground">No messaging conversations yet.</p>
+          )}
+          {contact.conversations.map((c) => (
+            <div key={c.id} className="rounded border p-3">
+              <div className="flex items-center justify-between text-sm">
+                <p className="flex items-center gap-2 font-medium">
+                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                  {c.channel} · {c.status}
+                </p>
+                <Link href={`/inbox?id=${c.id}`} className="text-xs text-primary hover:underline">
+                  Open in inbox →
+                </Link>
+              </div>
+              <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+                {c.messages[0]?.body ?? "No messages yet"}
+              </p>
+              {c.lastMessageAt && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Last message {c.lastMessageAt.toLocaleString("en-IN")}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>,
+    <Card key="campaigns">
+      <CardContent className="pt-6">
+        <div className="space-y-2">
+          {contact.campaignContacts.map((cc) => (
+            <div key={cc.id} className="rounded border p-3 text-sm">
+              <p className="font-medium">{cc.campaign.name}</p>
+              <p className="text-xs text-muted-foreground">Status: {cc.status} · Attempts: {cc.attempts}</p>
+            </div>
+          ))}
+          {contact.campaignContacts.length === 0 && <p className="text-sm text-muted-foreground">No campaign enrollments.</p>}
+        </div>
+      </CardContent>
+    </Card>,
+  ];
 
   return (
     <div className="space-y-6" data-testid="contact-detail-page">
@@ -105,86 +178,7 @@ export default async function ContactDetailPage({ params }: { params: { phone: s
               { key: "campaigns", label: "Campaigns" },
             ]}
           >
-            {(active) => (
-              <>
-                {active === "activity" && (
-                  <Card>
-                    <CardContent className="pt-6">
-                      <ActivityTimeline activities={activities} showFilters />
-                    </CardContent>
-                  </Card>
-                )}
-                {active === "calls" && (
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="space-y-3">
-                        {calls.map((c) => (
-                          <div key={c.id} className="flex items-center justify-between rounded border p-3 text-sm">
-                            <div className="flex items-center gap-2">
-                              <Phone className="h-4 w-4 text-muted-foreground" />
-                              <span className="font-medium">{c.direction === "INBOUND" ? "Inbound" : "Outbound"}</span>
-                              <span className="text-muted-foreground">{c.status}</span>
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {c.durationSec}s · {c.startedAt.toLocaleString("en-IN")}
-                              {c.outcome ? ` · ${c.outcome}` : ""}
-                            </div>
-                          </div>
-                        ))}
-                        {calls.length === 0 && <p className="text-sm text-muted-foreground">No calls.</p>}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-                {active === "messages" && (
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="space-y-4">
-                        {contact.conversations.length === 0 && (
-                          <p className="text-sm text-muted-foreground">No messaging conversations yet.</p>
-                        )}
-                        {contact.conversations.map((c) => (
-                          <div key={c.id} className="rounded border p-3">
-                            <div className="flex items-center justify-between text-sm">
-                              <p className="flex items-center gap-2 font-medium">
-                                <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                                {c.channel} · {c.status}
-                              </p>
-                              <Link href={`/inbox?id=${c.id}`} className="text-xs text-primary hover:underline">
-                                Open in inbox →
-                              </Link>
-                            </div>
-                            <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
-                              {c.messages[0]?.body ?? "No messages yet"}
-                            </p>
-                            {c.lastMessageAt && (
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                Last message {c.lastMessageAt.toLocaleString("en-IN")}
-                              </p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-                {active === "campaigns" && (
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="space-y-2">
-                        {contact.campaignContacts.map((cc) => (
-                          <div key={cc.id} className="rounded border p-3 text-sm">
-                            <p className="font-medium">{cc.campaign.name}</p>
-                            <p className="text-xs text-muted-foreground">Status: {cc.status} · Attempts: {cc.attempts}</p>
-                          </div>
-                        ))}
-                        {contact.campaignContacts.length === 0 && <p className="text-sm text-muted-foreground">No campaign enrollments.</p>}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </>
-            )}
+            {tabPanels}
           </Tabs>
         </div>
       </div>

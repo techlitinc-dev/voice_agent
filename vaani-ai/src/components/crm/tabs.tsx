@@ -1,13 +1,18 @@
 "use client";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
+/**
+ * Tab switcher. Children are plain ReactNode panels keyed by tab.key — NOT a
+ * render function, so server components can pass them directly (functions
+ * can't cross the server→client boundary in the app router).
+ */
 export function Tabs({
   tabs,
   children,
   defaultTab,
 }: {
   tabs: { key: string; label: string }[];
-  children: (active: string) => React.ReactNode;
+  children: ReactNode[];
   defaultTab?: string;
 }) {
   const [active, setActive] = useState(defaultTab ?? tabs[0]?.key ?? "");
@@ -25,7 +30,13 @@ export function Tabs({
           </button>
         ))}
       </div>
-      <div className="pt-4">{children(active)}</div>
+      <div className="pt-4">
+        {tabs.map((t, i) => (
+          <div key={t.key} hidden={active !== t.key} data-testid={`tab-panel-${t.key}`}>
+            {children[i]}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

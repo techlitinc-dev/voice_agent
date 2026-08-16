@@ -28,8 +28,10 @@ async function main() {
     },
   });
 
-  const workspace = await db.workspace.findUnique({ where: { slug: "demo-clinic" } });
-  if (!workspace) throw new Error("demo-clinic workspace not found — run the guide 02 seed first");
+  const workspace = await db.workspace.findUnique({
+    where: { slug: process.argv[4] ?? "demo-clinic" },
+  });
+  if (!workspace) throw new Error("workspace not found — run the guide 02 seed first");
 
   await db.membership.upsert({
     where: { userId_workspaceId: { userId: user.id, workspaceId: workspace.id } },

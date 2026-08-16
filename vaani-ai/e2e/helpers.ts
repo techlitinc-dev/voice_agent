@@ -136,19 +136,25 @@ export async function completeOnboardingFast(page: Page): Promise<void> {
 /**
  * Mint a session cookie via guide 03's CLI helper and inject it into the
  * browser context — simpler than UI login for role/permission specs.
- * Requires the demo-clinic workspace (guide 02 seed).
+ * Workspace defaults to the demo-clinic workspace (guide 02 seed); pass a
+ * different slug for cross-tenant specs (make-test-session.ts argv[4]).
  */
 export async function loginAsRole(
   context: BrowserContext,
   page: Page,
   email: string,
-  role: "OWNER" | "ADMIN" | "MANAGER" | "AGENT" | "VIEWER"
+  role: "OWNER" | "ADMIN" | "MANAGER" | "AGENT" | "VIEWER",
+  workspaceSlug = "demo-clinic"
 ): Promise<void> {
-  const out = sh(`npx tsx scripts/make-test-session.ts ${email} ${role}`);
+  const out = sh(`npx tsx scripts/make-test-session.ts ${email} ${role} ${workspaceSlug}`);
   const cookieLine = out.split("\n").find((l) => l.startsWith("vaani_session="));
   if (!cookieLine) throw new Error(`make-test-session failed: ${out}`);
   const value = cookieLine.replace("vaani_session=", "").trim();
   const base = new URL(process.env.E2E_BASE_URL ?? "http://localhost:3000");
+  // Clear any previously injected session cookies (loginDemo's storageState can
+  // carry vaani_session for both localhost and 127.0.0.1 — adding a third leaves
+  // the old one winning on the wire). The role cookie must be the only session.
+  await context.clearCookies();
   await context.addCookies([
     { name: "vaani_session", value, domain: base.hostname, path: "/" },
   ]);

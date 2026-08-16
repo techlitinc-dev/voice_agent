@@ -129,7 +129,6 @@ export async function fetchPipelineBoard(
     where,
     include: {
       contact: {
-        select: { id: true, name: true, phone: true },
         include: { leadScore: { select: { score: true, grade: true } } },
       },
       owner: { select: { id: true, fullName: true } },
