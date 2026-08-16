@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireWorkspace } from "@/lib/auth";
 import { formatINR } from "@/lib/money";
+import { invoiceNumberFor } from "@/lib/invoice";
 import { PrintButton } from "./print";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +20,7 @@ export default async function InvoicePage({ params }: { params: { id: string } }
 
   const total = invoice.amountPaise + invoice.gstPaise;
   const igst = invoice.igstPaise > 0;
+  const invoiceNumber = await invoiceNumberFor(ctx.workspaceId, invoice.id, invoice.createdAt);
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 rounded-lg bg-white p-8 text-black print:p-0">
@@ -26,7 +28,7 @@ export default async function InvoicePage({ params }: { params: { id: string } }
         <div>
           <h1 className="text-2xl font-bold">Tax Invoice</h1>
           <p className="text-sm text-gray-600">
-            {invoice.createdAt.toLocaleDateString("en-IN")} · HSN/SAC {invoice.hsnSac ?? "998314"}
+            {invoiceNumber} · {invoice.createdAt.toLocaleDateString("en-IN")} · HSN/SAC {invoice.hsnSac ?? "998314"}
           </p>
         </div>
         <PrintButton />

@@ -175,6 +175,40 @@ export function seedTestDid(): void {
   );
 }
 
+/**
+ * Register a brand-new workspace via the UI and SKIP the onboarding wizard by
+ * forcing the OnboardingState to "started" in the DB, then minting an OWNER
+ * session pinned to the fresh workspace (same trick as CRM-02). Returns the
+ * workspace id + the injected cookie, so the caller can navigate app pages.
+ * Avoids the Dograh-dependent template-publish step in completeOnboardingFast
+ * (host.docker.internal does not resolve on the host).
+ */
+export async function registerFreshWorkspaceSkipOnboarding(
+  page: Page,
+  tag: string
+): Promise<{ email: string; workspaceId: string }> {
+  const { email } = await registerFreshWorkspace(page, tag);
+  const ws = psql(
+    `SELECT m."workspaceId" FROM "Membership" m JOIN "User" u ON u.id=m."userId" WHERE u.email='${email}' LIMIT 1;`
+  );
+  psql(
+    `INSERT INTO "OnboardingState" (id, "workspaceId", "currentStep", checklist, "sampleDataEnabled", "updatedAt")
+     VALUES ('onb_${ws}', '${ws}', 1, '{"industry":true,"template":true,"knowledge":true,"test_call":true,"number":true}', true, now())
+     ON CONFLICT ("workspaceId") DO UPDATE SET "currentStep"=1, checklist=EXCLUDED.checklist;`
+  );
+  const wsSlug = psql(
+    `SELECT w.slug FROM "Workspace" w JOIN "Membership" m ON m."workspaceId"=w.id
+     JOIN "User" u ON u.id=m."userId" WHERE u.email='${email}' LIMIT 1;`
+  );
+  const out = sh(`npx tsx scripts/make-test-session.ts ${email} OWNER ${wsSlug}`);
+  const cookieLine = out.split("\n").find((l) => l.startsWith("vaani_session="));
+  if (!cookieLine) throw new Error(`make-test-session failed: ${out}`);
+  await page.context().addCookies([
+    { name: "vaani_session", value: cookieLine.replace("vaani_session=", "").trim(), domain: "localhost", path: "/" },
+  ]);
+  return { email, workspaceId: ws };
+}
+
 /** Sign a Dograh webhook body exactly like Dograh does (guide 04/06). */
 export function dograhSignature(body: string): string {
   const secret = envValue("DOGRAH_WEBHOOK_SECRET");

@@ -125,8 +125,8 @@ test.describe("Analytics dashboard (ANALYTICS-01..05)", () => {
     await page.goto("/dashboard");
     await expect(page.getByText("Wallet balance")).toBeVisible({ timeout: 15_000 });
     const dbBalance = walletBalance();
-    // formatINR renders ₹xx.xx from paise.
-    const expected = `₹${(dbBalance / 100).toFixed(2)}`;
+    // formatINR renders ₹xx.xx with Indian thousands separators (en-IN).
+    const expected = `₹${(dbBalance / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     await expect(page.locator("div").filter({ hasText: /^Wallet balance$/ }).locator("..").first()).toContainText(expected);
   });
 

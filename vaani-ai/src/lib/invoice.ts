@@ -31,6 +31,17 @@ export async function nextInvoiceSequence(workspaceId: string, date: Date): Prom
   return count + 1;
 }
 
+/** Derive an existing invoice's number: its ordinal within its FY (by createdAt). */
+export async function invoiceNumberFor(workspaceId: string, invoiceId: string, date: Date): Promise<string> {
+  const seq = await db.invoice.count({
+    where: {
+      workspaceId,
+      createdAt: { gte: fyStartDate(date), lte: date },
+    },
+  });
+  return formatInvoiceNumber(seq, date);
+}
+
 /**
  * GST on GST-inclusive retail totals (pure, unit-tested): back out the taxable
  * base (total × 100/118 at 18%), then splitGst — IGST for inter-state supply,
