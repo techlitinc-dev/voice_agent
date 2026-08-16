@@ -16,6 +16,29 @@ const num = (v: unknown): number | null => {
   return null;
 };
 
+/**
+ * Parse Dograh's plain-text transcript ("AI: ...\nCaller: ...") into per-turn
+ * rows for the CDR detail page. Unknown prefixes become SYSTEM turns.
+ */
+function parseTranscriptEntries(transcript: string): Array<{ speaker: "AGENT" | "CALLER" | "SYSTEM"; text: string }> {
+  const entries: Array<{ speaker: "AGENT" | "CALLER" | "SYSTEM"; text: string }> = [];
+  for (const raw of transcript.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = line.match(/^(AI|Agent|Bot|Caller|System|SYSTEM):\s*(.*)$/i);
+    if (m) {
+      const speaker = m[1].toLowerCase();
+      entries.push({
+        speaker: speaker === "caller" ? "CALLER" : speaker === "system" || speaker === "sys" ? "SYSTEM" : "AGENT",
+        text: m[2] || "",
+      });
+    } else {
+      entries.push({ speaker: "SYSTEM", text: line });
+    }
+  }
+  return entries;
+}
+
 async function logEvent(callId: string, type: string, event: string, data: Data) {
   await db.callEvent.create({
     data: { callId, type, payload: { event, data } as Prisma.InputJsonValue },
@@ -118,12 +141,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, ignored: true, error: "unknown call" });
     }
     const update: Prisma.CallUpdateInput = { status: "COMPLETED", endedAt: new Date() };
+    // Honor a terminal disposition in the payload (INBOUND-06/25): Dograh can
+    // report no-answer / busy / voicemail / failed — the CDR must keep that,
+    // otherwise missed-call callbacks and retry reconciliation never trigger.
+    const terminalStatus = str(data.status) ?? str(data.disposition);
+    const KNOWN_TERMINAL = ["COMPLETED", "NO_ANSWER", "BUSY", "FAILED", "VOICEMAIL"];
+    if (terminalStatus && (KNOWN_TERMINAL as string[]).includes(terminalStatus)) {
+      update.status = terminalStatus as Prisma.CallUpdateInput["status"];
+    }
     const dur = num(data.duration_seconds);
     if (dur !== null) update.durationSec = dur;
     const summary = str(data.summary);
     if (summary) update.summary = summary;
     const transcript = str(data.transcript);
-    if (transcript) update.transcript = transcript;
+    if (transcript) {
+      update.transcript = transcript;
+      // The call-detail page renders per-turn TranscriptEntry rows (SentimentTranscript),
+      // not the raw text — persist parsed turns so inbound CDRs show the transcript.
+      const parsed = parseTranscriptEntries(transcript);
+      if (parsed.length > 0) {
+        await db.transcriptEntry.createMany({
+          data: parsed.map((t, i) => ({
+            callId: call.id,
+            speaker: t.speaker,
+            text: t.text,
+            timestampMs: (i + 1) * 1000,
+          })),
+        });
+      }
+    }
     const outcome = str(data.outcome);
     if (outcome) update.outcome = outcome;
     // Real Dograh payloads carry a public recording URL. We park it as

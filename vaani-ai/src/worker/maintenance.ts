@@ -157,15 +157,17 @@ export async function sweepPostCalls(): Promise<void> {
   });
   for (const call of unsuccessful) await reconcileCall(call);
 
-  // 2) Intelligence on completed calls with a transcript.
+  // 2) Intelligence on completed calls with a transcript. BOTH directions:
+  //    outbound campaign calls (caller = toNumber) and inbound receptionist
+  //    calls (caller = fromNumber) get interest-scored (INBOUND-12). The
+  //    interestReason marker prevents reprocessing.
   const done = await db.call.findMany({
     where: {
-      direction: "OUTBOUND",
-      campaignId: { not: null },
       status: "COMPLETED",
       interestScore: null,
       interestReason: null,
       transcript: { not: null },
+      OR: [{ direction: "INBOUND" }, { direction: "OUTBOUND", campaignId: { not: null } }],
     },
     take: 10,
     orderBy: { createdAt: "asc" },
@@ -173,8 +175,10 @@ export async function sweepPostCalls(): Promise<void> {
   });
   for (const call of done) {
     const transcript = call.transcript ?? "";
+    // Inbound: the CALLER is fromNumber; outbound: the CALLER is toNumber.
+    const callerPhone = call.direction === "INBOUND" ? call.fromNumber : call.toNumber;
     const contact = await db.contact.findFirst({
-      where: { workspaceId: call.workspaceId, phone: call.toNumber },
+      where: { workspaceId: call.workspaceId, phone: callerPhone },
       select: { id: true, timezone: true },
     });
 
@@ -188,7 +192,7 @@ export async function sweepPostCalls(): Promise<void> {
     });
     if (scored?.score === "HOT") {
       await emitWebhookEvent(call.workspaceId, "lead.qualified", {
-        callId: call.id, phone: call.toNumber, score: "HOT", reason: scored.reason,
+        callId: call.id, phone: callerPhone, score: "HOT", reason: scored.reason,
       });
     }
 
@@ -196,7 +200,7 @@ export async function sweepPostCalls(): Promise<void> {
     //    An opted-out caller gets NO callback; an angry one still gets the human flag.
     const optedOut = detectOptOut({ outcome: call.outcome, transcript });
     if (optedOut) {
-      await optOutCascade({ workspaceId: call.workspaceId, phone: call.toNumber, callId: call.id });
+      await optOutCascade({ workspaceId: call.workspaceId, phone: callerPhone, callId: call.id });
     }
 
     // c) callback extraction ("call me tomorrow at 5") — skipped after opt-out
@@ -218,17 +222,17 @@ export async function sweepPostCalls(): Promise<void> {
           contactId: contact?.id ?? null,
           campaignId: call.campaignId,
           callId: call.id,
-          phone: call.toNumber,
+          phone: callerPhone,
           note: cb.note ?? "callback requested mid-call",
           dueAt: cb.dueAt,
         },
       });
       const jobDef = buildCallbackDialJob(
-        { workspaceId: call.workspaceId, callbackTaskId: task.id, phone: call.toNumber, note: task.note ?? undefined, dueAt: cb.dueAt },
+        { workspaceId: call.workspaceId, callbackTaskId: task.id, phone: callerPhone, note: task.note ?? undefined, dueAt: cb.dueAt },
         new Date()
       );
       await getDialerQueue().add(CALLBACK_DIAL_JOB, jobDef.data, { ...jobDef.opts, jobId: `cb-${task.id}` });
-      log(`[postcall] callback scheduled ${call.toNumber} at ${cb.dueAt.toISOString()}`);
+      log(`[postcall] callback scheduled ${callerPhone} at ${cb.dueAt.toISOString()}`);
     }
 
     // d) sentiment escalation → human flag (guide 06 TransferRequest contract)
@@ -238,7 +242,7 @@ export async function sweepPostCalls(): Promise<void> {
           workspaceId: call.workspaceId,
           callId: call.id,
           queue: "escalations",
-          reason: "angry/abusive caller on outbound call — polite exit done by AI, human follow-up needed",
+          reason: "angry/abusive caller — polite exit done by AI, human follow-up needed",
           contextSnapshot: {
             summary: call.summary ?? null,
             sentiment: call.sentiment ?? null,
