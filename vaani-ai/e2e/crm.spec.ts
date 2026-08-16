@@ -696,11 +696,14 @@ test.describe("CRM contacts (CRM-31..36)", () => {
   test("CRM-35: CRM import (dry-run) pulls fixture contacts + stamps crmExternalId", async ({ page }) => {
     await loginDemo(page);
     // Seed a CrmConnection so the import button renders (CRM_IMPORT_DRY_RUN=true
-    // in .env → fixture rows instead of a real provider call).
+    // in .env → fixture rows instead of a real provider call). The demo seed
+    // already creates one, but the spec must not depend on that — upsert on the
+    // (workspaceId, provider) unique key so re-runs are idempotent.
     psql(
-      `INSERT INTO "CrmConnection" (id, "workspaceId", provider, status, "accessToken")
-       SELECT 'crm_conn_${Date.now()}', id, 'hubspot', 'connected', 'dry-run'
-       FROM "Workspace" WHERE slug='demo-clinic' ON CONFLICT DO NOTHING;`
+      `INSERT INTO "CrmConnection" (id, "workspaceId", provider, "accessToken", active, "updatedAt")
+       SELECT 'crm_conn_e2e', w.id, 'HUBSPOT', 'dry-run', true, now() FROM "Workspace" w
+       WHERE w.slug='demo-clinic'
+       ON CONFLICT ("workspaceId", provider) DO UPDATE SET "accessToken"='dry-run', active=true, "updatedAt"=now();`
     );
     await page.goto("/contacts");
     await page.getByTestId("crm-import-button").first().click();
