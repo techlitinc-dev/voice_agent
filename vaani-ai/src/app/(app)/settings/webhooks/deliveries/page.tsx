@@ -19,9 +19,13 @@ export default async function WebhookDeliveriesPage({
   const status = searchParams.status ?? "";
   const statusFilter =
     status === "SUCCESS" || status === "FAILED" || status === "PENDING" ? status : undefined;
+  // WebhookDelivery is tenant-scoped through its subscription (no workspaceId
+  // column) — filter on the subscription relation.
   const where = {
-    workspaceId: ctx.workspaceId,
-    ...(searchParams.subscriptionId ? { subscriptionId: searchParams.subscriptionId } : {}),
+    subscription: {
+      workspaceId: ctx.workspaceId,
+      ...(searchParams.subscriptionId ? { id: searchParams.subscriptionId } : {}),
+    },
     ...(statusFilter ? { status: statusFilter as "SUCCESS" | "FAILED" | "PENDING" } : {}),
     ...(searchParams.event ? { event: searchParams.event } : {}),
   };
