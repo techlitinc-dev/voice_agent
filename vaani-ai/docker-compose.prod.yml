@@ -68,6 +68,25 @@ services:
       POSTGRES_USER: vaani
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: vaani
+    # Tuning per deployment runbook §5.1 (16GB VPS profile).
+    command:
+      - postgres
+      - -c
+      - shared_buffers=4GB
+      - -c
+      - effective_cache_size=12GB
+      - -c
+      - maintenance_work_mem=1GB
+      - -c
+      - work_mem=64MB
+      - -c
+      - max_connections=200
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - log_min_duration_statement=1000
     volumes:
       - pgdata_prod:/var/lib/postgresql/data
     healthcheck:
@@ -81,6 +100,10 @@ services:
     image: redis:7
     container_name: vaani-redis-prod
     restart: unless-stopped
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - redisdata_prod:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -121,5 +144,6 @@ networks:
 
 volumes:
   pgdata_prod:
+  redisdata_prod:
   miniodata_prod:
   caddy_data:

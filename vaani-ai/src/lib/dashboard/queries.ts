@@ -7,6 +7,7 @@ import { db } from "../db";
 import { Prisma } from "@prisma/client";
 import { type DateRange, marginPercent, pctChange, sumBilledPaise, sumWholesalePaise, computeAsr } from "../analytics";
 import { formatINR } from "../money";
+import { cache, dashboardKpiKey } from "../cache";
 
 export type CallStats = {
   total: number;
@@ -71,6 +72,15 @@ export async function getKpiWithTrend(workspaceId: string, current: DateRange, p
     marginPct: { value: currentStats.marginPct, trend: pctChange(currentStats.marginPct, previousStats.marginPct) },
     activeUsers: { value: currentStats.activeUsers, trend: pctChange(currentStats.activeUsers, previousStats.activeUsers) },
   };
+}
+
+/** Cache wrapper for the dashboard KPI block (scalability doc §3.3 — 60s TTL,
+ *  invalidated on new call). Key includes the range so changing the date
+ *  selector never serves a stale window. */
+export async function getKpiWithTrendCached(workspaceId: string, rangeKey: string, current: DateRange, previous: DateRange) {
+  return cache(dashboardKpiKey(workspaceId, rangeKey), 60, () =>
+    getKpiWithTrend(workspaceId, current, previous)
+  );
 }
 
 /** Average CSAT across the range: avg(totalScore / maxScore * 100), integer %. */

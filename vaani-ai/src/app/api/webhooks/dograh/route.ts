@@ -5,6 +5,7 @@ import { verifyDograhWebhook } from "@/lib/dograhWebhook";
 import { processCompletedCall } from "@/lib/postcall";
 import { emitWebhookEvent } from "@/lib/webhooks";
 import { resolveAgentForCall } from "@/lib/ab-test";
+import { callsStarted, callsCompleted, callDuration, webhooksReceived } from "@/lib/metrics";
 
 type Data = Record<string, unknown>;
 
@@ -66,6 +67,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "missing call_id" }, { status: 400 });
   }
 
+  // Inbound webhook volume (observability doc §2.2).
+  webhooksReceived.labels("dograh", "all").inc();
+
   let call = await db.call.findUnique({ where: { dograhCallId } });
 
   // ---- call.started: create the CDR row if we have never seen this call ----
@@ -119,6 +123,7 @@ export async function POST(req: NextRequest) {
       await emitWebhookEvent(call.workspaceId, "call.started", {
         callId: call.id, direction: call.direction, fromNumber: call.fromNumber, toNumber: call.toNumber,
       });
+      callsStarted.labels(call.direction, call.workspaceId).inc();
       return NextResponse.json({ ok: true, created: call.id });
     }
     await db.call.update({
@@ -129,6 +134,7 @@ export async function POST(req: NextRequest) {
     await emitWebhookEvent(call.workspaceId, "call.started", {
       callId: call.id, direction: call.direction, fromNumber: call.fromNumber, toNumber: call.toNumber,
     });
+    callsStarted.labels(call.direction, call.workspaceId).inc();
     return NextResponse.json({ ok: true });
   }
 
@@ -178,6 +184,11 @@ export async function POST(req: NextRequest) {
     if (recUrl) update.recordingKey = `pending:${recUrl}`;
     if (Object.keys(update).length) {
       await db.call.update({ where: { id: call.id }, data: update });
+    }
+    // Call lifecycle metrics (observability doc §2.1/§2.2).
+    callsCompleted.labels(call.direction, String(update.status ?? "COMPLETED"), call.workspaceId).inc();
+    if (typeof update.durationSec === "number") {
+      callDuration.labels(call.direction).observe(update.durationSec);
     }
     await logEvent(call.id, "summary", event, data);
     // Fire-and-forget post-call processing (outcome, entities, DNC, lead capture,

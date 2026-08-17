@@ -1,0 +1,81 @@
+# Prometheus alert rules for Vaani AI (observability doc §6.1).
+groups:
+  - name: vaani-critical
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(vaani_http_request_duration_seconds_count{status=~"5.."}[5m]))
+          / sum(rate(vaani_http_request_duration_seconds_count[5m])) > 0.05
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "5xx error rate > 5% for 5 minutes"
+
+      - alert: WorkerLag
+        expr: max(vaani_queue_depth) by (queue) > 100
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "Queue {{ $labels.queue }} has > 100 pending jobs"
+
+      - alert: OldestJobTooOld
+        expr: max(vaani_worker_lag_seconds) by (queue) > 300
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "Oldest pending job in {{ $labels.queue }} is > 5 minutes old"
+
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels: { severity: page }
+
+      - alert: PostgresHighConnections
+        expr: pg_stat_activity_count / pg_settings_max_connections > 0.8
+        for: 5m
+        labels: { severity: page }
+
+      - alert: HighDiskUsage
+        expr: (1 - node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100 > 90
+        for: 5m
+        labels: { severity: page }
+
+      - alert: CallSuccessRateLow
+        expr: |
+          sum(rate(vaani_calls_completed_total{status="COMPLETED"}[15m]))
+          / clamp_min(sum(rate(vaani_calls_started_total[15m])), 0.001) < 0.70
+        for: 15m
+        labels: { severity: warn }
+        annotations:
+          summary: "Call completion rate < 70%"
+
+      - alert: PaymentFailureSpike
+        expr: rate(vaani_payment_failed_total[10m]) > 0.1
+        for: 5m
+        labels: { severity: page }
+
+      - alert: InstanceDown
+        expr: up == 0
+        for: 1m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $labels.job }} ({{ $labels.instance }}) is down"
+
+  - name: vaani-warn
+    rules:
+      - alert: HighCpu
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "CPU > 85% for 5 minutes"
+
+      - alert: HighMemory
+        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 > 90
+        for: 5m
+        labels: { severity: page }
+
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.8
+        for: 5m
+        labels: { severity: warn }

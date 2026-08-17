@@ -9,6 +9,7 @@ import { requirePermission } from "@/lib/auth";
 import { debitWallet } from "@/lib/billing";
 import { getAddOn } from "@/lib/addons";
 import { generateMonthlyInvoice } from "@/lib/invoice";
+import { paymentsFailed, paymentsInitiated } from "@/lib/metrics";
 
 export type ActionResult = { ok: boolean; error?: string };
 export type OrderResult = ActionResult & { orderId?: string; amountPaise?: number; keyId?: string };
@@ -43,9 +44,11 @@ export async function createTopupOrderAction(amountPaise: number): Promise<Order
         status: "created",
       },
     });
+    paymentsInitiated.labels("razorpay", ctx.workspaceId).inc();
     return { ok: true, orderId: order.id, amountPaise, keyId: process.env.RAZORPAY_KEY_ID };
   } catch (e) {
     console.error(e);
+    paymentsFailed.labels("razorpay", "create_order", "unknown").inc();
     return { ok: false, error: "Could not create payment order. Check Razorpay keys." };
   }
 }
@@ -87,6 +90,7 @@ export async function createStripeCheckoutAction(amountPaise: number): Promise<S
         status: "created",
       },
     });
+    paymentsInitiated.labels("stripe", ctx.workspaceId).inc();
     if (!session.url) return { ok: false, error: "Stripe returned no checkout URL." };
     return { ok: true, url: session.url };
   } catch (e) {

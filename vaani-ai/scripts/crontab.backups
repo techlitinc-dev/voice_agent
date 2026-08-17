@@ -1,0 +1,23 @@
+# Backup scheduler (disaster-recovery doc §2).
+# Install: crontab scripts/crontab.backups (review paths first!)
+#
+# RTO/RPO targets:
+#   Postgres logical dump every 5 min (RPO 5 min) + daily dump (retention 30d)
+#   Redis RDB hourly (RPO ~1 min, AOF covers the rest)
+#   Secrets snapshot weekly
+#   MinIO replication is continuous (configured once via setup-minio-replication.sh)
+
+# Postgres — 5-min base backup (keep local 3, off-site 30d via S3 lifecycle)
+*/5 * * * * /root/voice_agent/vaani-ai/scripts/backup-pg.sh >> /var/log/vaani/backup-pg.log 2>&1
+
+# Postgres — daily logical dump (retention 30 days off-site)
+30 2 * * * /root/voice_agent/vaani-ai/scripts/backup-pg.sh >> /var/log/vaani/backup-pg.log 2>&1
+
+# Redis — hourly RDB snapshot (retention 24 local)
+15 * * * * /root/voice_agent/vaani-ai/scripts/backup-redis.sh >> /var/log/vaani/backup-redis.log 2>&1
+
+# Secrets — weekly encrypted .env snapshot
+45 3 * * 0 /root/voice_agent/vaani-ai/scripts/backup-secrets.sh >> /var/log/vaani/backup-secrets.log 2>&1
+
+# Alert when a backup fails (backup scripts exit non-zero on error)
+# */5 * * * * /root/voice_agent/vaani-ai/scripts/alert.sh "backup-pg failed — check /var/log/vaani/backup-pg.log" || true

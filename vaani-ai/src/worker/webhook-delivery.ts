@@ -11,6 +11,7 @@
 import { PrismaClient } from "@prisma/client";
 import { nextBackoffMs, signWebhookPayload, WEBHOOK_MAX_ATTEMPTS } from "../lib/webhook-sign";
 import { appendAttemptLog } from "../lib/webhook-delivery-log";
+import { webhooksDelivered } from "../lib/metrics";
 
 const db = new PrismaClient();
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
@@ -71,6 +72,7 @@ export async function deliverWebhooks(take = 10): Promise<number> {
             }),
           },
         });
+        webhooksDelivered.labels("success", sub.workspaceId).inc();
         log(`[webhooks] delivered ${delivery.id} event=${delivery.event} -> ${res.status}`);
       } else {
         throw new Error(`HTTP ${res.status}`);
@@ -78,6 +80,7 @@ export async function deliverWebhooks(take = 10): Promise<number> {
     } catch (e) {
       const statusCode = /^HTTP (\d+)$/.exec((e as Error).message ?? "")?.[1];
       const exhausted = attempts >= WEBHOOK_MAX_ATTEMPTS;
+      webhooksDelivered.labels(exhausted ? "failed" : "retry", sub.workspaceId).inc();
       await db.webhookDelivery.update({
         where: { id: delivery.id },
         data: {

@@ -30,11 +30,50 @@ const APP_ROUTE_PREFIXES = [
   "/settings", "/onboarding", "/crm", "/inbox", "/reports", "/reseller",
 ];
 
+// Mutating methods that must carry a valid CSRF token (hardening doc §4.2).
+// Server Actions in Next.js have built-in origin checks, so this guards the
+// REST routes. The token travels as a double-submit cookie: a non-httpOnly
+// "csrf-token" cookie + matching "x-csrf-token" header.
+const MUTATING = ["POST", "PUT", "PATCH", "DELETE"];
+
+/** Paths that legitimately mutate WITHOUT a CSRF token (signature-checked or
+ *  key-checked — a token adds nothing because there's no ambient session). */
+const CSRF_EXEMPT_PREFIXES = [
+  "/api/webhooks/", // HMAC signature verification (Dograh, Razorpay, Vobiz…)
+  "/api/v1/",       // API-key authenticated, scoped, IP-allowlisted
+  "/api/tools/",    // x-tool-secret shared secret
+  "/api/mcp",       // x-mcp-key shared secret
+  "/api/auth/",     // login/register/SSO — no session cookie yet; protected by rate limit
+  "/api/domain-ask",
+];
+
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  if (PUBLIC_PATHS.includes(pathname)) return NextResponse.next();
-  if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) return NextResponse.next();
+  // ---- CSRF double-submit cookie (hardening doc §4.2) ----
+  const res = NextResponse.next();
+  if (!req.cookies.get("csrf-token")) {
+    res.cookies.set("csrf-token", crypto.randomUUID(), {
+      httpOnly: false,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+    });
+  }
+
+  const exempt =
+    CSRF_EXEMPT_PREFIXES.some((p) => pathname.startsWith(p)) ||
+    PUBLIC_PATHS.includes(pathname);
+  if (MUTATING.includes(req.method) && !exempt && !pathname.startsWith("/_next/")) {
+    const headerToken = req.headers.get("x-csrf-token");
+    const cookieToken = req.cookies.get("csrf-token")?.value;
+    if (!headerToken || !cookieToken || headerToken !== cookieToken) {
+      return new NextResponse("CSRF token mismatch", { status: 403 });
+    }
+  }
+
+  if (PUBLIC_PATHS.includes(pathname)) return res;
+  if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) return res;
 
   if (APP_ROUTE_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
     const session = req.cookies.get("vaani_session")?.value;
@@ -46,12 +85,11 @@ export function middleware(req: NextRequest) {
     }
     // Forward the attempted path so the app layout can preserve ?next= when a
     // session is present but expired/revoked (AUTH-09/10).
-    const res = NextResponse.next();
     res.headers.set("x-vaani-pathname", pathname);
     return res;
   }
 
-  return NextResponse.next(); // unknown route → Next.js 404
+  return res; // unknown route → Next.js 404
 }
 
 export const config = {

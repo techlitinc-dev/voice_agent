@@ -1,0 +1,12 @@
+# Grafana dashboards provisioning folder (observability doc §7).
+apiVersion: 1
+
+providers:
+  - name: vaani
+    orgId: 1
+    folder: Vaani AI
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards

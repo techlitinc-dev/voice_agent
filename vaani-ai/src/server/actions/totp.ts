@@ -1,11 +1,11 @@
 "use server";
 
 import { z } from "zod";
-import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getCurrentSession, requireUser } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import { verifyPassword } from "@/lib/passwords";
 import {
   generateBackupCodes,
   generateTotpSecret,
@@ -78,14 +78,23 @@ export async function confirmTotpEnrollmentAction(input: unknown): Promise<TotpA
   return { ok: true, backupCodes };
 }
 
-/** Disable 2FA. Requires the current password (re-auth) — never disable silently. */
+/** Disable 2FA. Requires the current password (re-auth) — never disable silently.
+ *  OWNER/ADMIN roles are enforced (hardening §1.7): 2FA cannot be turned off
+ *  while the user holds a privileged role in any workspace. */
 export async function disableTotpAction(input: unknown): Promise<TotpActionResult> {
   const user = await requireUser();
   const parsed = z.object({ password: z.string().min(1) }).safeParse(input);
   if (!parsed.success) return { ok: false, error: "Password required." };
 
-  const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);
+  const valid = await verifyPassword(parsed.data.password, user.passwordHash);
   if (!valid) return { ok: false, error: "Wrong password." };
+
+  const privileged = await db.membership.count({
+    where: { userId: user.id, role: { in: ["OWNER", "ADMIN"] } },
+  });
+  if (privileged > 0) {
+    return { ok: false, error: "Two-factor authentication is required for your role and cannot be disabled." };
+  }
 
   const totp = await db.totpSecret.findUnique({ where: { userId: user.id } });
   if (!totp || totp.status !== "ENABLED") return { ok: false, error: "2FA is not enabled." };

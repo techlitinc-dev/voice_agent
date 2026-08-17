@@ -1,0 +1,113 @@
+# High Availability stack (docs/production-readiness/04-disaster-recovery.md §3).
+# Medium tier and above:
+#   - Patroni PostgreSQL cluster (primary + 2 replicas, etcd leader election)
+#   - HAProxy in front of Patroni (routes writes to leader, reads to any)
+#   - Redis Sentinel (1 primary + 2 replicas + 3 sentinels)
+#
+# Reference topology — adjust image tags / env to your registry. The app's
+# DATABASE_URL should point at haproxy:5000 (writes) and DATABASE_REPLICA_URL
+# at haproxy:5001 (reads); REDIS_URL should point at the Sentinel master.
+services:
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.13
+    container_name: vaani-etcd
+    restart: unless-stopped
+    command: >
+      etcd --name etcd0 --data-dir /etcd-data
+      --listen-client-urls http://0.0.0.0:2379
+      --advertise-client-urls http://etcd:2379
+      --listen-peer-urls http://0.0.0.0:2380
+      --initial-advertise-peer-urls http://etcd:2380
+      --initial-cluster etcd0=http://etcd:2380
+      --initial-cluster-state new
+    volumes:
+      - etcddata:/etcd-data
+    networks: [internal]
+
+  patroni0: &patroni
+    image: ghcr.io/zalando/spilo-16:3.1
+    container_name: vaani-patroni-0
+    restart: unless-stopped
+    environment:
+      SCOPE: vaani
+      NAMESPACE: /pg/
+      ETCD_HOST: etcd:2379
+      PGHOST: 0.0.0.0
+      PGUSER: vaani
+      PGPASSWORD: ${DB_PASSWORD}
+      PGDATABASE: vaani
+      PGPORT: "5432"
+    volumes:
+      - patroni0data:/home/postgres/pgdata
+    networks: [internal]
+    depends_on: [etcd]
+
+  patroni1:
+    <<: *patroni
+    container_name: vaani-patroni-1
+    volumes:
+      - patroni1data:/home/postgres/pgdata
+
+  patroni2:
+    <<: *patroni
+    container_name: vaani-patroni-2
+    volumes:
+      - patroni2data:/home/postgres/pgdata
+
+  haproxy:
+    image: haproxy:3.0
+    container_name: vaani-pg-haproxy
+    restart: unless-stopped
+    volumes:
+      - ./ha/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "5000:5000" # writes → Patroni leader
+      - "5001:5001" # reads → any Patroni node
+    networks: [internal]
+    depends_on: [patroni0, patroni1, patroni2]
+
+  redis-primary:
+    image: redis:7
+    container_name: vaani-redis-primary
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - redisprimary:/data
+    networks: [internal]
+
+  redis-replica-1: &redis_replica
+    image: redis:7
+    restart: unless-stopped
+    command: ["redis-server", "--replicaof", "redis-primary", "6379", "--appendonly", "yes"]
+    depends_on: [redis-primary]
+    networks: [internal]
+
+  redis-replica-2:
+    <<: *redis_replica
+
+  sentinel-1: &sentinel
+    image: redis:7
+    restart: unless-stopped
+    command: >
+      redis-server --port 26379
+      --sentinel monitor vaanimaster redis-primary 6379 2
+      --sentinel down-after-milliseconds vaanimaster 5000
+      --sentinel failover-timeout vaanimaster 10000
+    depends_on: [redis-primary, redis-replica-1, redis-replica-2]
+    networks: [internal]
+
+  sentinel-2:
+    <<: *sentinel
+
+  sentinel-3:
+    <<: *sentinel
+
+networks:
+  internal: {}
+
+volumes:
+  etcddata:
+  patroni0data:
+  patroni1data:
+  patroni2data:
+  redisprimary:

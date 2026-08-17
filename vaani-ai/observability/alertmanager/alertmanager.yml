@@ -1,0 +1,34 @@
+# Alertmanager routing (observability doc §6.2).
+# page → PagerDuty (phone), warn → Slack #alerts, info → Slack (no notify).
+route:
+  receiver: default
+  group_by: ["alertname", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers: ["severity=page"]
+      receiver: pagerduty
+      continue: true
+    - matchers: ["severity=warn"]
+      receiver: slack-alerts
+
+receivers:
+  - name: default
+    slack_configs:
+      - send_resolved: true
+        channel: "#alerts"
+        api_url: ${SLACK_WEBHOOK_URL}
+
+  - name: slack-alerts
+    slack_configs:
+      - send_resolved: true
+        channel: "#alerts"
+        api_url: ${SLACK_WEBHOOK_URL}
+        title: '[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }}'
+        text: "{{ range .Alerts }}{{ .Annotations.summary }}\n{{ end }}"
+
+  - name: pagerduty
+    pagerduty_configs:
+      - service_key: ${PAGERDUTY_ROUTING_KEY}
+        send_resolved: true

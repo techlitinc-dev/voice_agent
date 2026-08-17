@@ -1,0 +1,38 @@
+name: Security
+
+on: [push, pull_request]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vaani-ai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      # Dependency audit (hardening doc §6): fail on high/critical.
+      - run: npm audit --omit=dev --audit-level=high
+      # SAST (hardening doc §6).
+      - uses: returntocorp/semgrep-action@v1
+        with:
+          config: p/owasp-top-ten
+          generateSarif: "1"
+          sarifTitle: Vaani AI semgrep
+      # Container image scan (hardening doc §6) — build the image first.
+      - name: Build Docker image
+        run: docker build -t vaani-ai:latest .
+      - uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: vaani-ai:latest
+          severity: CRITICAL,HIGH
+          format: sarif
+          output: trivy-results.sarif
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif

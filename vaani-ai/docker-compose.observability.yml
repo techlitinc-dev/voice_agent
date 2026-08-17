@@ -1,0 +1,131 @@
+# Observability stack (docs/production-readiness/02-observability-and-monitoring.md).
+# Run: docker compose -f docker-compose.observability.yml up -d
+#
+# Requires:
+#   METRICS_TOKEN  — same value as the app's METRICS_TOKEN (scrape auth)
+#   PAGERDUTY_ROUTING_KEY — (optional) for Alertmanager → PagerDuty
+services:
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: vaani-prometheus
+    restart: unless-stopped
+    environment:
+      METRICS_TOKEN: ${METRICS_TOKEN:?set METRICS_TOKEN to the app's scrape token}
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/rules:/etc/prometheus/rules:ro
+      - promdata:/prometheus
+    networks: [internal]
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: vaani-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/provisioning/dashboards:/var/lib/grafana/dashboards:ro
+      - grafanadata:/var/lib/grafana
+    networks: [internal, web]
+    ports:
+      - "3001:3000"
+    depends_on: [prometheus, loki, tempo]
+
+  loki:
+    image: grafana/loki:3.1.0
+    container_name: vaani-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - lokidata:/loki
+    networks: [internal]
+    ports:
+      - "3100:3100"
+
+  promtail:
+    image: grafana/promtail:3.1.0
+    container_name: vaani-promtail
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/config.yml
+    volumes:
+      - ./observability/promtail/config.yml:/etc/promtail/config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [internal]
+    depends_on: [loki]
+
+  tempo:
+    image: grafana/tempo:2.5.0
+    container_name: vaani-tempo
+    restart: unless-stopped
+    command: -config.file=/etc/tempo/config.yaml
+    volumes:
+      - ./observability/tempo/config.yaml:/etc/tempo/config.yaml:ro
+      - tempodata:/var/tempo
+    networks: [internal]
+    ports:
+      - "3200:3200"
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: vaani-alertmanager
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+    volumes:
+      - ./observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    networks: [internal]
+    ports:
+      - "9093:9093"
+    depends_on: [prometheus]
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: vaani-node-exporter
+    restart: unless-stopped
+    command:
+      - --path.rootfs=/host
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    networks: [internal]
+    ports:
+      - "9100:9100"
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: vaani-postgres-exporter
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: postgresql://vaani:${DB_PASSWORD}@db:5432/vaani?sslmode=disable
+    networks: [internal]
+    ports:
+      - "9187:9187"
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.62.0
+    container_name: vaani-redis-exporter
+    restart: unless-stopped
+    command: ["--redis.addr", "redis://redis:6379"]
+    networks: [internal]
+    ports:
+      - "9121:9121"
+
+networks:
+  internal: {}
+  web: {}
+
+volumes:
+  promdata:
+  grafanadata:
+  lokidata:
+  tempodata:

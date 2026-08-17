@@ -29,6 +29,14 @@ const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 const CARD_CANDIDATE_RE = /\b(?:\d[ -]?){12,18}\d\b/g;
 const AADHAAR_RE = /\b\d{4}[ -]?\d{4}[ -]?\d{4}\b/g;
 const OTP_RE = /\b(otp|one[- ]time password|verification code|pin)\b\D{0,12}?(\d{4,8})\b/gi;
+// PAN — 5 letters + 4 digits + 1 letter (Indian tax id).
+const PAN_RE = /\b[A-Z]{5}\d{4}[A-Z]\b/g;
+// Indian phone — optional +91/91/0 prefix + 10 digits (5-5 or run), with
+// grouping. Lookbehind + trailing \b prevent matching inside longer digit
+// runs (order ids, card numbers). The whole match (prefix included) is redacted.
+const PHONE_RE = /(?<![\d+])(?:\+?91[\s-]?|0)?[6-9]\d{4}[\s-]?\d{5}\b/g;
+// CVV — 3–4 digits that immediately follow the word "cvv" (context-aware).
+const CVV_RE = /\bcvv\b[:\s-]*(\d{3,4})\b/gi;
 
 /** Redact PII from one text blob. Idempotent (re-running on redacted text is a no-op). */
 export function redactPii(text: string): RedactionResult {
@@ -61,6 +69,24 @@ export function redactPii(text: string): RedactionResult {
   out = out.replace(OTP_RE, (_match, label: string) => {
     findings.push("otp");
     return `${label} [REDACTED:OTP]`;
+  });
+
+  // 5) PAN (Indian tax id).
+  out = out.replace(PAN_RE, () => {
+    findings.push("pan");
+    return "[REDACTED:PAN]";
+  });
+
+  // 6) Indian phone numbers (10-digit runs with optional 91/0/+91 prefix).
+  out = out.replace(PHONE_RE, () => {
+    findings.push("phone");
+    return "[REDACTED:PHONE]";
+  });
+
+  // 7) CVV — only when preceded by the word "cvv" (context-aware).
+  out = out.replace(CVV_RE, (_match, cvv: string) => {
+    findings.push("cvv");
+    return _match.replace(cvv, "[REDACTED:CVV]");
   });
 
   return { redacted: out, findings };

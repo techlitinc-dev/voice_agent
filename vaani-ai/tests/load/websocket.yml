@@ -1,0 +1,25 @@
+// Load test: concurrent WebSocket connections to the live dashboard
+// (scalability doc §6.1). Target: 2,000 concurrent connections.
+//
+// Run: artillery run tests/load/websocket.yml
+config:
+  target: "https://app.vaani.ai"
+  phases:
+    - duration: 60
+      arrivalRate: 10
+      name: "ramp to 600"
+    - duration: 120
+      arrivalRate: 25
+      name: "ramp to 2000"
+    - duration: 60
+      arrivalRate: 5
+      name: "cool down"
+  engines:
+    socketio: {}
+scenarios:
+  - engine: socketio
+    flow:
+      - emit:
+          channel: "live:subscribe"
+          data: "workspace:demo"
+      - think: 30

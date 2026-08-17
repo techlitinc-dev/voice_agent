@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
 import { google } from "googleapis";
 import { db } from "@/lib/db";
 import { createSession } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { provisionUserWithWorkspace } from "@/lib/provision";
+import { hashPassword } from "@/lib/passwords";
+import { lockoutState } from "@/lib/lockout";
 
 function baseUrl() {
   return process.env.APP_BASE_URL ?? "http://localhost:3000";
@@ -42,11 +43,15 @@ export async function GET(req: NextRequest) {
     if (identity) {
       userId = identity.userId;
     } else {
-      // 2) Existing user with same email → link the identity.
+      // 2) Existing user with same email → link the identity. Locked accounts
+      // are rejected (hardening §1.6) — SSO must not bypass the lockout.
       let user = await db.user.findUnique({ where: { email } });
+      if (user && lockoutState(user).locked) {
+        return NextResponse.json({ ok: false, error: "account_locked" }, { status: 423 });
+      }
       if (!user) {
         // 3) First login via Google → auto-provision a workspace (like register).
-        const passwordHash = await bcrypt.hash(crypto.randomUUID(), 10);
+        const passwordHash = await hashPassword(crypto.randomUUID());
         const provisioned = await provisionUserWithWorkspace({
           fullName: profile.name ?? email.split("@")[0],
           email,

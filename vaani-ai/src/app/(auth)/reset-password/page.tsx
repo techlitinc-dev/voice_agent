@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { resetPasswordAction } from "@/server/actions/password-reset";
+import { PASSWORD_MIN_LENGTH } from "@/lib/password-rules";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -54,9 +55,9 @@ function ResetPasswordForm() {
                 data-testid="reset-password-input"
                 name="password"
                 type="password"
-                placeholder="New password (8+ chars)"
+                placeholder={`New password (${PASSWORD_MIN_LENGTH}+ chars)`}
                 required
-                minLength={8}
+                minLength={PASSWORD_MIN_LENGTH}
               />
               <Input
                 data-testid="reset-password-confirm-input"
@@ -64,7 +65,7 @@ function ResetPasswordForm() {
                 type="password"
                 placeholder="Confirm new password"
                 required
-                minLength={8}
+                minLength={PASSWORD_MIN_LENGTH}
               />
               {error && <p data-testid="reset-password-error" className="text-sm text-red-400">{error}</p>}
               <Button data-testid="reset-password-submit" className="w-full" disabled={loading}>

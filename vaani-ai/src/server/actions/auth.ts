@@ -1,8 +1,8 @@
 "use server";
 
 import { z } from "zod";
-import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import {
   createPendingTotpToken,
@@ -16,9 +16,12 @@ import {
 import { logAudit } from "@/lib/audit";
 import { provisionUserWithWorkspace } from "@/lib/provision";
 import { findMatchingBackupCode, verifyTotpCode } from "@/lib/totp";
+import { hashPassword, isBreachedPassword, rehashIfNeeded, verifyPassword } from "@/lib/passwords";
+import { clearFailedLogins, lockoutState, recordFailedLogin } from "@/lib/lockout";
+import { rateLimit } from "@/lib/ratelimit-redis";
 
 // Password rule shared with the register form client (src/lib/password-rules.ts).
-import { PASSWORD_RULE, PASSWORD_HINT } from "@/lib/password-rules";
+import { PASSWORD_RULE, PASSWORD_HINT, PASSWORD_MIN_LENGTH } from "@/lib/password-rules";
 
 export type ActionResult = {
   ok: boolean;
@@ -30,11 +33,24 @@ export type ActionResult = {
 const registerSchema = z.object({
   fullName: z.string().min(2).max(80),
   email: z.string().email().toLowerCase(),
-  password: z.string().min(8).max(100).regex(PASSWORD_RULE, PASSWORD_HINT),
+  password: z.string().min(PASSWORD_MIN_LENGTH).max(100).regex(PASSWORD_RULE, PASSWORD_HINT),
   businessName: z.string().min(2).max(80),
 });
 
+function requestIp(): string | null {
+  const h = headers();
+  const fwd = h.get("x-forwarded-for");
+  if (fwd) return fwd.split(",")[0].trim();
+  return h.get("x-real-ip");
+}
+
 export async function registerAction(input: unknown): Promise<ActionResult> {
+  const ip = requestIp() ?? "unknown";
+
+  // Rate limit: 3 registrations / minute / IP (hardening doc §4.1).
+  const allowed = await rateLimit(`register:${ip}`, 3, 60);
+  if (!allowed) return { ok: false, error: "Too many attempts. Try again in a minute." };
+
   const parsed = registerSchema.safeParse(input);
   if (!parsed.success) {
     const passwordIssue = parsed.error.issues.find((i) => i.path[0] === "password");
@@ -45,7 +61,12 @@ export async function registerAction(input: unknown): Promise<ActionResult> {
   const existing = await db.user.findUnique({ where: { email } });
   if (existing) return { ok: false, error: "An account with this email already exists." };
 
-  const passwordHash = await bcrypt.hash(password, 10);
+  // Breach-list check (hardening doc §1.10) — HIBP k-anonymity, fail-open.
+  if (await isBreachedPassword(password)) {
+    return { ok: false, error: "This password appears in a known data breach. Choose a different one." };
+  }
+
+  const passwordHash = await hashPassword(password);
   const { user, workspace } = await provisionUserWithWorkspace({
     fullName, email, passwordHash, businessName,
   });
@@ -75,21 +96,68 @@ async function firstWorkspaceId(userId: string): Promise<string | undefined> {
   return membership?.workspaceId;
 }
 
+/** True when the user holds an OWNER or ADMIN role in any workspace
+ *  (hardening doc §1.7 — TOTP is mandatory for these roles). */
+async function hasPrivilegedRole(userId: string): Promise<boolean> {
+  const memberships = await db.membership.findMany({
+    where: { userId, role: { in: ["OWNER", "ADMIN"] } },
+    select: { role: true },
+  });
+  return memberships.length > 0;
+}
+
 export async function loginAction(input: unknown): Promise<ActionResult> {
+  const ip = requestIp() ?? "unknown";
+
+  // Rate limit: 10 logins / minute / IP (hardening doc §4.1).
+  const allowed = await rateLimit(`login:${ip}`, 10, 60);
+  if (!allowed) return { ok: false, error: "Too many login attempts. Try again in a minute." };
+
   const parsed = loginSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid email or password." };
 
   const user = await db.user.findUnique({ where: { email: parsed.data.email } });
   if (!user) return { ok: false, error: "Invalid email or password." };
 
-  const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);
-  if (!valid) return { ok: false, error: "Invalid email or password." };
+  // Lockout gate (hardening doc §1.6) — check BEFORE verifying the password so
+  // a locked account can't be used as an oracle.
+  const state = lockoutState(user);
+  if (state.locked) {
+    return { ok: false, error: "Account temporarily locked due to too many failed attempts. Try again in 15 minutes." };
+  }
+
+  const valid = await verifyPassword(parsed.data.password, user.passwordHash);
+  if (!valid) {
+    await recordFailedLogin(user.id);
+    await logAudit({
+      workspaceId: (await firstWorkspaceId(user.id)) ?? user.id,
+      userId: user.id,
+      action: "auth.login_failed",
+      entity: "User",
+      entityId: user.id,
+    });
+    return { ok: false, error: "Invalid email or password." };
+  }
+  await clearFailedLogins(user.id);
+
+  // Rehash-on-login: legacy bcrypt hashes get upgraded to argon2id.
+  if (rehashIfNeeded(user.passwordHash)) {
+    await db.user.update({
+      where: { id: user.id },
+      data: { passwordHash: await hashPassword(parsed.data.password) },
+    });
+  }
 
   // TOTP second factor (spec 3.3): if enabled, do NOT create the session yet.
   const totp = await db.totpSecret.findUnique({ where: { userId: user.id } });
   if (totp && totp.status === "ENABLED") {
     const pendingToken = await createPendingTotpToken(user.id);
     return { ok: true, requiresTotp: true, pendingToken };
+  }
+
+  // TOTP enforcement (hardening doc §1.7): OWNER/ADMIN must have 2FA enabled.
+  if (await hasPrivilegedRole(user.id)) {
+    return { ok: false, error: "Two-factor authentication is required for your role. Contact an administrator." };
   }
 
   const workspaceId = await firstWorkspaceId(user.id);
@@ -116,6 +184,12 @@ export async function verifyLoginTotpAction(input: unknown): Promise<ActionResul
 
   const userId = await verifyPendingTotpToken(parsed.data.pendingToken);
   if (!userId) return { ok: false, error: "Session expired. Sign in again." };
+
+  // TOTP verify rate limit: 5 / minute / IP+email (hardening doc §4.1).
+  const ip = requestIp() ?? "unknown";
+  const userRow = await db.user.findUnique({ where: { id: userId }, select: { email: true } });
+  const allowed = await rateLimit(`totp:${ip}:${userRow?.email ?? userId}`, 5, 60);
+  if (!allowed) return { ok: false, error: "Too many attempts. Try again in a minute." };
 
   const totp = await db.totpSecret.findUnique({ where: { userId } });
   if (!totp || totp.status !== "ENABLED") return { ok: false, error: "2FA is not enabled." };

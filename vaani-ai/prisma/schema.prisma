@@ -129,6 +129,11 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  // Failed-login lockout (hardening doc §1.6): 5 consecutive failures → locked
+  // for 15 minutes. Cleared on successful login / password change / reset.
+  failedLoginAttempts Int      @default(0)
+  lockedUntil         DateTime?
+
   memberships           Membership[]
   sessions              Session[]
   totpSecret            TotpSecret?
@@ -174,6 +179,9 @@ model Session {
   deviceName        String?
   ipAddress         String?
   userAgent         String?
+  // Device binding (hardening doc §1.5): sha256 of "userAgent|ipPrefix". The
+  // session is invalid when the request fingerprint doesn't match.
+  deviceFingerprint String?
   lastSeenAt        DateTime  @default(now())
   revokedAt         DateTime? // set by forced logout (spec 3.3)
   expiresAt         DateTime
@@ -606,6 +614,8 @@ model Contact {
 
   @@unique([workspaceId, phone])
   @@index([workspaceId])
+  @@index([workspaceId, dnc]) // DNC scrub (high-frequency) (scalability §2.1)
+  @@index([workspaceId, listId]) // list membership (scalability §2.1)
 }
 
 model DncEntry {
@@ -686,6 +696,7 @@ model CampaignContact {
 
   @@unique([campaignId, contactId])
   @@index([campaignId, status])
+  @@index([campaignId, status, nextAttemptAt]) // worker pickup query (scalability §2.1)
 }
 
 model CallbackTask {
@@ -1173,6 +1184,8 @@ model Call {
 
   @@index([workspaceId, createdAt])
   @@index([workspaceId, campaignId])
+  @@index([workspaceId, status, createdAt]) // filtered call lists (scalability §2.1)
+  @@index([agentId, createdAt]) // agent analytics (scalability §2.1)
 }
 
 model CallEvent {

@@ -1,8 +1,17 @@
-# Extra dialer-only workers. Usage:
-#   docker compose -f docker-compose.prod.yml -f docker-compose.scale.yml up -d
-# BullMQ spreads dial jobs across vaani-worker + these replicas. Crons do NOT run
-# here (RUN_CRON=false) — no overlap with the primary worker.
+# Horizontal scaling (docs/production-readiness/03-scalability-and-performance.md).
+# Usage:
+#   docker compose -f docker-compose.prod.yml -f docker-compose.scale.yml up -d --scale app=3 --scale worker-scale=4
+#
+# - app: N web replicas behind the existing Caddy load balancer (Caddyfile
+#   already reverse-proxies to app:3000 — Docker DNS round-robins across replicas).
+# - worker-scale: N extra dialer-only workers. BullMQ spreads dial jobs across
+#   the primary worker + replicas. Crons do NOT run here (RUN_CRON=false).
+# - pgbouncer: transaction-mode connection pool in front of Postgres (§2.3).
 services:
+  app:
+    deploy:
+      replicas: ${WEB_REPLICAS:-2}
+
   worker-scale:
     image: vaani-app:latest
     restart: unless-stopped
@@ -11,14 +20,37 @@ services:
     environment:
       NODE_ENV: production
       RUN_CRON: "false"
-      DATABASE_URL: postgresql://vaani:${DB_PASSWORD}@db:5432/vaani?connection_limit=5
+      DATABASE_URL: postgresql://vaani:${DB_PASSWORD}@pgbouncer:6432/vaani?connection_limit=5
       REDIS_URL: redis://redis:6379
       S3_ENDPOINT: http://minio:9000
+      # Per-worker env tuning (scalability doc §4.1) — scale workers out (not up)
+      # to raise aggregate throughput; keep each process modest.
+      DIAL_CONCURRENCY: ${DIAL_CONCURRENCY:-10}
+      DIAL_RATE_PER_SEC: ${DIAL_RATE_PER_SEC:-50}
+      METRICS_PORT: "3001"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
     deploy:
-      replicas: 2
+      replicas: ${WORKER_REPLICAS:-2}
+    networks: [internal]
+
+  pgbouncer:
+    image: edoburu/pgbouncer:1.21.0
+    container_name: vaani-pgbouncer
+    restart: unless-stopped
+    environment:
+      DB_USER: vaani
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: db
+      DB_NAME: vaani
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: "500"
+      DEFAULT_POOL_SIZE: "25"
+    volumes:
+      - ./pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+    depends_on:
+      db: { condition: service_healthy }
     networks: [internal]

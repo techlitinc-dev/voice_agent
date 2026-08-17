@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatINR } from "@/lib/money";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { Download, PhoneCall, PhoneIncoming, IndianRupee, Percent, Users, Star } from "lucide-react";
 import { StatCard } from "@/components/ui/stat-card";
 import { DateRangePicker } from "@/components/analytics/date-range-picker";
@@ -17,7 +18,7 @@ import {
   getCallsBySource,
   getCallsTimeSeries,
   getCsat,
-  getKpiWithTrend,
+  getKpiWithTrendCached,
   getSentimentTrend,
 } from "@/lib/dashboard/queries";
 import { LiveTiles } from "./live-tiles";
@@ -32,7 +33,7 @@ function kpiId(label: string): string {
 }
 
 function KpiRow(props: {
-  kpis: Awaited<ReturnType<typeof getKpiWithTrend>>;
+  kpis: Awaited<ReturnType<typeof getKpiWithTrendCached>>;
   csat: { value: number; scored: number };
 }) {
   const { kpis, csat } = props;
@@ -109,6 +110,49 @@ function AlertsPanel({ alerts }: { alerts: Awaited<ReturnType<typeof getAlerts>>
   );
 }
 
+// Slow chart sections stream in behind Suspense (scalability doc §5.3) — the
+// KPI row renders as soon as the fast queries resolve, charts fill in after.
+async function ChartsSection({ workspaceId, current }: { workspaceId: string; current: ReturnType<typeof getDateRange> }) {
+  const [timeSeries, byAgent, byCampaign, bySource, sentimentTrend, alerts] = await Promise.all([
+    getCallsTimeSeries(workspaceId, current, "day"),
+    getCallsByAgent(workspaceId, current),
+    getCallsByCampaign(workspaceId, current),
+    getCallsBySource(workspaceId, current),
+    getSentimentTrend(workspaceId, current),
+    getAlerts(workspaceId),
+  ]);
+  return (
+    <>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <CallsOverTime data={timeSeries} />
+        <RevenueVsCost data={timeSeries} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <CallsByAgent data={byAgent} />
+        <CallsByCampaign data={byCampaign} />
+        <CallsBySource data={bySource} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <SentimentTrend data={sentimentTrend} />
+        <AlertsPanel alerts={alerts} />
+      </div>
+    </>
+  );
+}
+
+function ChartsSkeleton() {
+  return (
+    <div className="grid gap-4 lg:grid-cols-2" data-testid="charts-skeleton">
+      <div className="h-64 animate-pulse rounded-md border border-border bg-card" />
+      <div className="h-64 animate-pulse rounded-md border border-border bg-card" />
+      <div className="h-64 animate-pulse rounded-md border border-border bg-card" />
+      <div className="h-64 animate-pulse rounded-md border border-border bg-card" />
+    </div>
+  );
+}
+
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -126,15 +170,11 @@ export default async function DashboardPage({
   const current = getDateRange(range);
   const previous = previousRange(current);
 
-  const [kpis, csat, timeSeries, byAgent, byCampaign, bySource, alerts, sentimentTrend] = await Promise.all([
-    getKpiWithTrend(ctx.workspaceId, current, previous),
+  // Fast path: KPIs (cached 60s) + wallet render immediately; the chart
+  // section below streams in behind <Suspense> (scalability doc §5.3).
+  const [kpis, csat] = await Promise.all([
+    getKpiWithTrendCached(ctx.workspaceId, range, current, previous),
     getCsat(ctx.workspaceId, current),
-    getCallsTimeSeries(ctx.workspaceId, current, "day"),
-    getCallsByAgent(ctx.workspaceId, current),
-    getCallsByCampaign(ctx.workspaceId, current),
-    getCallsBySource(ctx.workspaceId, current),
-    getAlerts(ctx.workspaceId),
-    getSentimentTrend(ctx.workspaceId, current),
   ]);
 
   return (
@@ -178,21 +218,10 @@ export default async function DashboardPage({
 
         <KpiRow kpis={kpis} csat={csat} />
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <CallsOverTime data={timeSeries} />
-          <RevenueVsCost data={timeSeries} />
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-3">
-          <CallsByAgent data={byAgent} />
-          <CallsByCampaign data={byCampaign} />
-          <CallsBySource data={bySource} />
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          <SentimentTrend data={sentimentTrend} />
-          <AlertsPanel alerts={alerts} />
-        </div>
+        {/* Slow charts stream in (scalability doc §5.3) */}
+        <Suspense fallback={<ChartsSkeleton />}>
+          <ChartsSection workspaceId={ctx.workspaceId} current={current} />
+        </Suspense>
       </div>
     </main>
   );

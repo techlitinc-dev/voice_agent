@@ -1,0 +1,111 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Calls today",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(increase(vaani_calls_started_total[24h]))",
+          "legendFormat": "calls"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Active calls",
+      "type": "gauge",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(vaani_active_calls)",
+          "legendFormat": "active"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Call success rate (1h)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(vaani_calls_completed_total{status=\"COMPLETED\"}[1h])) / clamp_min(sum(rate(vaani_calls_started_total[1h])), 0.001)",
+          "legendFormat": "success rate"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Avg call duration (1h)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(vaani_call_duration_seconds_sum[1h])) / sum(rate(vaani_call_duration_seconds_count[1h]))",
+          "legendFormat": "avg seconds"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Error rate (5m)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(vaani_http_request_duration_seconds_count{status=~\"5..\"}[5m])) / clamp_min(sum(rate(vaani_http_request_duration_seconds_count[5m])), 0.001)",
+          "legendFormat": "error rate"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Revenue today",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(vaani_revenue_paise_total)",
+          "legendFormat": "paise billed"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Worker health",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "expr": "vaani_queue_depth",
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "System health",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        {
+          "expr": "up",
+          "format": "table"
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["vaani", "executive"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "Vaani AI — Executive Overview",
+  "uid": "vaani-exec",
+  "version": 1
+}

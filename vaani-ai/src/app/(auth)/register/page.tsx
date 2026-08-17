@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { registerAction } from "@/server/actions/auth";
-import { PASSWORD_RULE } from "@/lib/password-rules";
+import { PASSWORD_RULE, PASSWORD_MIN_LENGTH } from "@/lib/password-rules";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,7 +16,7 @@ function validateField(name: string, value: string): string | null {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "Enter a valid email address.";
   }
   if (name === "password") {
-    if (value.length < 8) return "Password must be at least 8 characters.";
+    if (value.length < PASSWORD_MIN_LENGTH) return `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`;
     if (!PASSWORD_RULE.test(value)) {
       return "Password needs an uppercase, a lowercase, a number and a special character.";
     }
@@ -87,7 +87,7 @@ export default function RegisterPage() {
               )}
             </div>
             <div>
-              <Input data-testid="register-password-input" name="password" type="password" placeholder="Password (8+ chars)" required minLength={8} />
+              <Input data-testid="register-password-input" name="password" type="password" placeholder={`Password (${PASSWORD_MIN_LENGTH}+ chars)`} required minLength={PASSWORD_MIN_LENGTH} />
               {fieldErrors.password && (
                 <p data-testid="register-password-error" className="mt-1 text-xs text-red-400">{fieldErrors.password}</p>
               )}

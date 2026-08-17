@@ -4,6 +4,7 @@ import { requireWorkspace } from "@/lib/auth";
 import { installTemplateAction, unpublishTemplateAction } from "@/server/actions/marketplace";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { cache, marketplaceKey } from "@/lib/cache";
 
 export const metadata = { title: "Marketplace — Vaani AI" };
 export default async function MarketplacePage() {
@@ -13,11 +14,15 @@ export default async function MarketplacePage() {
   } catch {
     redirect("/login");
   }
-  const templates = await db.marketplaceTemplate.findMany({
-    where: { published: true },
-    orderBy: [{ installs: "desc" }, { createdAt: "desc" }],
-    include: { authorWorkspace: { select: { name: true } } },
-  });
+  // 10-min cache (scalability doc §3.3) — template installs are cross-workspace
+  // but the LIST itself changes rarely.
+  const templates = await cache(marketplaceKey(), 600, () =>
+    db.marketplaceTemplate.findMany({
+      where: { published: true },
+      orderBy: [{ installs: "desc" }, { createdAt: "desc" }],
+      include: { authorWorkspace: { select: { name: true } } },
+    })
+  );
 
   return (
     <div className="space-y-6">

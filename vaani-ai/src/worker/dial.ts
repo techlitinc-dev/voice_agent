@@ -10,6 +10,7 @@ import { resolveAgentForCall } from "../lib/ab-test"; // guide 05 A/B + version 
 import { sendWhatsAppGated } from "./whatsapp"; // dry-run gate over guide 04's canonical client
 import { parseRetryPolicy, computeNextRetryAligned, isDisposition, type Disposition } from "../lib/campaign/retry";
 import { shouldSendWhatsAppFallback } from "../lib/campaign/fallback";
+import { cache, agentConfigKey } from "../lib/cache";
 import type {
   DialJobData,
   CallbackDialJobData,
@@ -82,10 +83,15 @@ export async function resolveWorkflowForAgent(
   workspaceId: string,
   callerPhone?: string
 ): Promise<{ dograhWorkflowId: string; dograhWorkflowUuid: string; versionId: string | null } | null> {
-  const versions = await db.agentVersion.findMany({
-    where: { agentId: agent.id, workspaceId, status: "PUBLISHED" },
-    select: { id: true, isAbVariant: true, abTrafficPercent: true, dograhWorkflowId: true, dograhWorkflowUuid: true },
-  });
+  // Published version list cached 60s per agent (scalability doc §3.3) — short
+  // TTL so version rollbacks and A/B repaints propagate fast. The A/B pick is
+  // still computed per call (needs the caller's phone).
+  const versions = await cache(agentConfigKey(agent.id), 60, () =>
+    db.agentVersion.findMany({
+      where: { agentId: agent.id, workspaceId, status: "PUBLISHED" },
+      select: { id: true, isAbVariant: true, abTrafficPercent: true, dograhWorkflowId: true, dograhWorkflowUuid: true },
+    })
+  );
   const resolved = resolveAgentForCall({ agentId: agent.id, callerPhone, publishedVersions: versions, pinnedVersionId: agent.pinnedVersionId ?? null });
   const wf = resolved ?? (agent.dograhWorkflowId
     ? { dograhWorkflowId: agent.dograhWorkflowId, dograhWorkflowUuid: agent.dograhWorkflowUuid, versionId: null as string | null }

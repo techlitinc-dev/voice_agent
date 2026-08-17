@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatINR } from "@/lib/money";
 import { changePlanAction } from "@/server/actions/billing";
+import { getPlansCached } from "@/lib/billing";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ export default async function PlansPage() {
   try { ctx = await requireWorkspace(); } catch { redirect("/login"); }
 
   const [plans, sub, addOns] = await Promise.all([
-    db.plan.findMany({ orderBy: { monthlyPricePaise: "asc" } }),
+    getPlansCached(), // 1h cache (scalability doc §3.3)
     db.subscription.findUnique({ where: { workspaceId: ctx.workspaceId }, include: { plan: true } }),
     db.addOnPurchase.findMany({ where: { workspaceId: ctx.workspaceId, active: true } }),
   ]);

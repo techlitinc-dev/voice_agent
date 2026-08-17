@@ -7,6 +7,7 @@
  * CAMPAIGN_DRY_RUN=true simulates dials AND post-call LLM results — no Dograh, no
  * OpenRouter, no cost.
  */
+import { createServer } from "node:http";
 import { Worker } from "bullmq";
 import cron from "node-cron";
 import { createRedisConnection, QUEUES } from "../lib/queue";
@@ -30,9 +31,13 @@ import { deliverWebhooks } from "./webhook-delivery";
 import { startCronJobs } from "./cron";
 import { gdprSweep } from "./gdpr";
 import { runRetryAnalysisSweep } from "./retry-analysis";
+import { queueDepth, workerLagSeconds } from "../lib/metrics";
+import { workerLogger } from "../lib/logger";
+import { startTracing } from "../lib/tracing";
 
 const DRY_RUN = process.env.CAMPAIGN_DRY_RUN !== "false"; // default true — safe
-const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
+const logger = workerLogger();
+const log = (...a: unknown[]) => logger.info(a.map((x) => (typeof x === "string" ? x : JSON.stringify(x))).join(" "));
 
 /** Sweep calls whose recording is still a pending remote URL; ingest into MinIO. */
 async function recordingSweeper() {
@@ -59,13 +64,17 @@ async function recordingSweeper() {
 }
 
 async function main() {
+  startTracing();
   log(`worker starting (CAMPAIGN_DRY_RUN=${DRY_RUN}, TRAI_HOURS_ENFORCE=${process.env.TRAI_HOURS_ENFORCE ?? "true"}, REQUIRE_CONSENT=${process.env.REQUIRE_CONSENT_FOR_PROMOTIONAL ?? "false"})`);
   const connection = createRedisConnection();
 
   // Cron/interval registrations run ONLY on the primary worker (guide 12 scaling).
   const RUN_CRON = process.env.RUN_CRON !== "false";
 
-  new Worker(QUEUES.scheduler, schedulerTick, { connection, concurrency: 5 });
+  new Worker(QUEUES.scheduler, schedulerTick, {
+    connection,
+    concurrency: Number(process.env.SCHEDULER_CONCURRENCY ?? 5),
+  });
 
   new Worker<DialJobData | CallbackDialJobData | ManualDialJobData>(
     QUEUES.dialer,
@@ -81,12 +90,20 @@ async function main() {
           log(`[dialer] unknown job name "${job.name}" — ignored`);
       }
     },
-    { connection, concurrency: 10 }
+    {
+      connection,
+      // Env-tunable concurrency + rate limiter (scalability doc §4.1).
+      concurrency: Number(process.env.DIAL_CONCURRENCY ?? 10),
+      limiter: {
+        max: Number(process.env.DIAL_RATE_PER_SEC ?? 50),
+        duration: 1000,
+      },
+    }
   );
 
   new Worker<WhatsAppSendJobData>(QUEUES.whatsapp, whatsappSendJob, {
     connection,
-    concurrency: 2,
+    concurrency: Number(process.env.WHATSAPP_CONCURRENCY ?? 2),
     limiter: { max: 5, duration: 1000 }, // 5 msgs/sec — provider-friendly throttle
   });
 
@@ -94,7 +111,7 @@ async function main() {
   // conversational, not bulk sends.
   new Worker<ChatReplyJobData>(QUEUES.chatReply, chatReplyJob, {
     connection,
-    concurrency: 5,
+    concurrency: Number(process.env.CHATREPLY_CONCURRENCY ?? 5),
   });
 
   if (RUN_CRON) {
@@ -147,7 +164,61 @@ async function main() {
     });
   }
 
+  // Queue-depth + worker-lag gauges (observability doc §2.1/§2.2). Read every
+  // 30s; failures are logged, never fatal. The worker exposes its own /metrics
+  // scrape target (see startMetricsServer below) because BullMQ gauges live in
+  // the worker process, separate from the web app's registry.
+  setInterval(async () => {
+    try {
+      for (const q of Object.values(QUEUES)) {
+        const queue = new (await import("bullmq")).Queue(q, { connection: createRedisConnection() });
+        try {
+          const counts = await queue.getJobCounts("waiting", "delayed");
+          const oldest = await queue.getDelayed(0, 0); // earliest scheduled job
+          queueDepth.labels(q).set((counts.waiting ?? 0) + (counts.delayed ?? 0));
+          if (oldest[0]?.timestamp) {
+            workerLagSeconds.labels(q).set(Math.max(0, (Date.now() - oldest[0].timestamp) / 1000));
+          }
+        } finally {
+          await queue.close();
+        }
+      }
+    } catch (e) {
+      console.error("[metrics] queue depth read failed", e);
+    }
+  }, 30_000);
+
   log("worker ready — scheduler + dialer + whatsapp + chat-reply + cron (callbacks, post-call, nightly cap reset)");
+  startMetricsServer();
+}
+
+/** Expose the worker's metrics registry on METRICS_PORT (default 3001) so
+ *  Prometheus can scrape the BullMQ gauges without hitting the web app.
+ *  Same bearer-token guard as /api/metrics. */
+function startMetricsServer() {
+  const port = Number(process.env.METRICS_PORT ?? 3001);
+  const token = process.env.METRICS_TOKEN;
+  const server = createServer(async (req, res) => {
+    if (req.method !== "GET" || req.url !== "/metrics") {
+      res.writeHead(404).end();
+      return;
+    }
+    if (token && req.headers.authorization !== `Bearer ${token}`) {
+      res.writeHead(401).end("Unauthorized");
+      return;
+    }
+    try {
+      const { metricsText } = await import("../lib/metrics");
+      const body = await metricsText();
+      res.writeHead(200, { "Content-Type": "text/plain; version=0.0.4; charset=utf-8" });
+      res.end(body);
+    } catch (e) {
+      console.error("[metrics] export failed", e);
+      res.writeHead(500).end("metrics error");
+    }
+  });
+  server.listen(port, () => log(`[metrics] worker exporter on :${port}/metrics`));
+  server.on("error", (e: Error) => console.error("[metrics] exporter error", e));
 }
 
 main().catch((e) => {

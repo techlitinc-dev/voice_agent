@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 import { db } from "./db";
 import { emitWebhookEvent } from "./webhooks";
+import { cache, rateCardKey } from "./cache";
 import {
   componentCosts,
   retailTotalPaise,
@@ -10,6 +11,26 @@ import {
 } from "./ratecard";
 
 export type DebitType = "CALL_DEBIT" | "NUMBER_RENT" | "ADDON_DEBIT" | "PLAN_FEE";
+
+/** Resolve the effective wholesale rate card for a workspace, cached 1h
+ *  (scalability doc §3.3). Invalidated implicitly by the TTL — reseller
+ *  overrides are set rarely and a stale card for an hour is acceptable. */
+export async function cachedRateCard(workspaceId: string) {
+  return cache(rateCardKey(workspaceId), 3600, async () => {
+    const ws = await db.workspace.findUnique({
+      where: { id: workspaceId },
+      include: { reseller: true },
+    });
+    return parseRateCardJson(ws?.reseller?.wholesaleRateCard, DEFAULT_RATE_CARD);
+  });
+}
+
+/** All plan definitions, cached 1h (scalability doc §3.3 — plans rarely change). */
+export async function getPlansCached() {
+  return cache("plans:all", 3600, () =>
+    db.plan.findMany({ orderBy: { monthlyPricePaise: "asc" } })
+  );
+}
 
 /**
  * Trial-vs-wallet decision (pure, unit-tested). Whole-minute accounting; a call
@@ -130,18 +151,13 @@ export async function billCall(callId: string): Promise<number | null> {
   });
   if (already) return null;
 
-  const [sub, ws] = await Promise.all([
-    db.subscription.findUnique({
-      where: { workspaceId: call.workspaceId },
-      include: { plan: true },
-    }),
-    db.workspace.findUnique({
-      where: { id: call.workspaceId },
-      include: { reseller: true },
-    }),
-  ]);
+  const sub = await db.subscription.findUnique({
+    where: { workspaceId: call.workspaceId },
+    include: { plan: true },
+  });
   const markup = sub?.plan.markupPercent ?? DEFAULT_MARKUP_PERCENT;
-  const rateCard = parseRateCardJson(ws?.reseller?.wholesaleRateCard, DEFAULT_RATE_CARD);
+  // Rate card cached 1h (scalability doc §3.3) — reseller overrides change rarely.
+  const rateCard = await cachedRateCard(call.workspaceId);
   const costs = componentCosts(call.durationSec, rateCard);
   const billed = retailTotalPaise(costs, markup);
   const callMinutes = Math.ceil(call.durationSec / 60);

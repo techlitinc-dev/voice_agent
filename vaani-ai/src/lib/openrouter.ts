@@ -5,10 +5,29 @@
  * (default meta-llama/llama-3.1-8b-instruct — cheap classification).
  */
 
+import { createHash } from "node:crypto";
+import { cache } from "./cache";
+
 export class OpenRouterError extends Error {
   constructor(public status: number, message: string) {
     super(`OpenRouter ${status}: ${message}`);
   }
+}
+
+/**
+ * Cache the static part of a prompt (system + knowledge context) keyed by a
+ * stable content hash (scalability doc §7 — prompt caching). Only the
+ * conversation turns re-process. TTL 1h; cache failures fall back to a live
+ * build. The caller must pass a stable `cacheKey` (e.g. agentId) and the full
+ * `build` closure.
+ */
+export async function cachedSystemPrompt<T>(
+  cacheKey: string,
+  content: string,
+  build: () => Promise<T>
+): Promise<T> {
+  const hash = createHash("sha256").update(content).digest("hex").slice(0, 16);
+  return cache(`prompt:${cacheKey}:${hash}`, 3600, build);
 }
 
 export async function callOpenRouterJson(input: {

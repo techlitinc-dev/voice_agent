@@ -1,12 +1,14 @@
 "use server";
 
 import { z } from "zod";
-import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { revokeAllUserSessions } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { createResetToken, verifyResetToken } from "@/lib/password-reset";
 import { sendPasswordResetEmail } from "@/lib/password-reset-email";
+import { hashPassword, isBreachedPassword } from "@/lib/passwords";
+import { clearFailedLogins } from "@/lib/lockout";
+import { PASSWORD_RULE, PASSWORD_HINT, PASSWORD_MIN_LENGTH } from "@/lib/password-rules";
 
 export type PasswordResetResult = { ok: boolean; error?: string };
 
@@ -16,7 +18,7 @@ const requestSchema = z.object({
 
 const resetSchema = z.object({
   token: z.string().min(10).max(200),
-  password: z.string().min(8).max(100),
+  password: z.string().min(PASSWORD_MIN_LENGTH).max(100).regex(PASSWORD_RULE, PASSWORD_HINT),
 });
 
 /** Public confirmation — identical whether or not the email exists (no enumeration). */
@@ -49,13 +51,22 @@ export async function requestPasswordResetAction(input: unknown): Promise<Passwo
 /** Step 2: consume the token and set a new password. Revokes all existing sessions. */
 export async function resetPasswordAction(input: unknown): Promise<PasswordResetResult> {
   const parsed = resetSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Password must be 8+ characters." };
+  if (!parsed.success) {
+    const passwordIssue = parsed.error.issues.find((i) => i.path[0] === "password");
+    return { ok: false, error: passwordIssue?.message ?? PASSWORD_HINT };
+  }
 
   const userId = await verifyResetToken(parsed.data.token);
   if (!userId) return { ok: false, error: INVALID_TOKEN };
 
-  const passwordHash = await bcrypt.hash(parsed.data.password, 10);
+  // Breach-list check (hardening doc §1.10) — HIBP k-anonymity, fail-open.
+  if (await isBreachedPassword(parsed.data.password)) {
+    return { ok: false, error: "This password appears in a known data breach. Choose a different one." };
+  }
+
+  const passwordHash = await hashPassword(parsed.data.password);
   await db.user.update({ where: { id: userId }, data: { passwordHash } });
+  await clearFailedLogins(userId);
   await revokeAllUserSessions(userId); // old sessions must die after a password change
 
   await logAudit({

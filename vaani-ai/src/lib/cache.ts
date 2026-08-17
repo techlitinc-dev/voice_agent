@@ -69,3 +69,31 @@ export async function invalidateCache(key: string): Promise<void> {
 export function crmStatsKey(workspaceId: string, rangeKey: string): string {
   return `crm:stats:${workspaceId}:${rangeKey}`;
 }
+
+// ---------- Key helpers (scalability doc §3.3) ----------
+
+/** Dashboard KPI cache key (60s TTL — invalidated on new call). */
+export function dashboardKpiKey(workspaceId: string, rangeKey: string): string {
+  return `dash:kpi:${workspaceId}:${rangeKey}`;
+}
+
+/** Plan definition cache key (1h TTL — rarely change). */
+export function planKey(code: string): string {
+  return `plan:${code}`;
+}
+
+/** Rate-card cache key (1h TTL). */
+export function rateCardKey(workspaceId: string): string {
+  return `ratecard:${workspaceId}`;
+}
+
+/** Marketplace template list key (10min TTL). */
+export function marketplaceKey(): string {
+  return "marketplace:templates";
+}
+
+/** Agent published config key (60s TTL — short, to pick up version rollbacks fast). */
+export function agentConfigKey(agentId: string, versionId?: string | null): string {
+  return `agent:config:${agentId}:${versionId ?? "latest"}`;
+}
+

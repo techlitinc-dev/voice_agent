@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { audit } from "@/lib/audit";
+import { invalidateCache, agentConfigKey } from "@/lib/cache";
 import { getTemplate } from "@/lib/templates";
 import {
   buildAgentWorkflow,
@@ -393,6 +394,7 @@ export async function unpublishAgentAction(agentId: string): Promise<ActionResul
       workspaceId: ctx.workspaceId, userId: ctx.user.id,
       action: "agent.unpublish", entity: "Agent", entityId: agentId,
     });
+    await invalidateCache(agentConfigKey(agentId));
     revalidatePath("/agents");
     revalidatePath(`/agents/${agentId}`);
     return { ok: true };
@@ -468,6 +470,7 @@ export async function publishAgentAction(agentId: string, label?: string): Promi
       action: "agent.publish", entity: "Agent", entityId: agent.id,
       metadata: { version: version.version, dograhWorkflowId: pushed.id },
     });
+    await invalidateCache(agentConfigKey(agent.id));
     revalidatePath("/agents");
     revalidatePath(`/agents/${agentId}`);
     return { ok: true, id: version.id };
@@ -558,6 +561,7 @@ export async function rollbackAgentAction(agentId: string, versionId: string): P
       action: "agent.rollback", entity: "Agent", entityId: agentId,
       metadata: { toVersion: version.version, dograhWorkflowId: pushed.id },
     });
+    await invalidateCache(agentConfigKey(agentId));
     revalidatePath("/agents");
     revalidatePath(`/agents/${agentId}`);
     return { ok: true, id: version.id };
@@ -649,6 +653,7 @@ export async function createAbVariantAction(
       action: "agent.ab_variant", entity: "Agent", entityId: agentId,
       metadata: { variantVersion: variant.version, pct: parsed.data.abTrafficPercent },
     });
+    await invalidateCache(agentConfigKey(agentId));
     revalidatePath(`/agents/${agentId}`);
     return { ok: true, id: variant.id };
   } catch (e) {
@@ -670,6 +675,7 @@ export async function removeAbVariantAction(agentId: string, variantId: string):
       action: "agent.ab_variant_end", entity: "Agent", entityId: agentId,
       metadata: { variantId },
     });
+    await invalidateCache(agentConfigKey(agentId));
     revalidatePath(`/agents/${agentId}`);
     return { ok: true };
   } catch (e) {

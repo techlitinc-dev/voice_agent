@@ -56,4 +56,23 @@ describe("redactPii", () => {
     const r2 = redactPii(r1.redacted);
     expect(r2.redacted).toBe(r1.redacted); // idempotent
   });
+
+  it("redacts PAN (Indian tax id)", () => {
+    const r = redactPii("my PAN is ABCDE1234F");
+    expect(r.redacted).toBe("my PAN is [REDACTED:PAN]");
+    expect(r.findings).toEqual(["pan"]);
+  });
+
+  it("redacts Indian phone numbers with +91 / 91 / 0 prefixes", () => {
+    const r = redactPii("call +91 98765 43210 or 09876543210 or 9876543210");
+    expect(r.redacted).toBe("call [REDACTED:PHONE] or [REDACTED:PHONE] or [REDACTED:PHONE]");
+    expect(r.findings).toEqual(["phone", "phone", "phone"]);
+  });
+
+  it("redacts CVV only when preceded by the word cvv", () => {
+    const r = redactPii("cvv: 123 and card 4111 1111 1111 1111");
+    expect(r.redacted).toContain("cvv: [REDACTED:CVV]");
+    // a bare 3-digit number NOT preceded by cvv survives
+    expect(redactPii("the code is 123").redacted).toBe("the code is 123");
+  });
 });

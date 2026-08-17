@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { audit } from "@/lib/audit";
+import { invalidateCache, marketplaceKey } from "@/lib/cache";
 
 export type MarketplaceResult = { ok: boolean; error?: string; id?: string };
 
@@ -49,6 +50,7 @@ export async function publishTemplateAction(agentId: string, input: unknown): Pr
       action: "marketplace.publish", entity: "MarketplaceTemplate", entityId: tpl.id,
       metadata: { agentId },
     });
+    await invalidateCache(marketplaceKey());
     revalidatePath("/marketplace");
     return { ok: true, id: tpl.id };
   } catch (e) {
@@ -66,6 +68,7 @@ export async function unpublishTemplateAction(templateId: string): Promise<Marke
       data: { published: false },
     });
     if (updated.count === 0) return { ok: false, error: "Template not found (only the author can unpublish)." };
+    await invalidateCache(marketplaceKey());
     revalidatePath("/marketplace");
     return { ok: true };
   } catch (e) {
@@ -117,6 +120,7 @@ export async function installTemplateAction(templateId: string): Promise<Marketp
       action: "marketplace.install", entity: "MarketplaceTemplate", entityId: tpl.id,
       metadata: { agentId: agent.id },
     });
+    await invalidateCache(marketplaceKey());
     revalidatePath("/agents");
     revalidatePath("/marketplace");
     return { ok: true, id: agent.id };
